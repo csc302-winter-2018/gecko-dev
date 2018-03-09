@@ -135,9 +135,6 @@ let propNameWhitelist = [
   // Bug 1441879
   {propName: "--arrow-width",
    isFromDevTools: true},
-  // Bug 1442300
-  {propName: "--in-content-category-background",
-   isFromDevTools: false},
 
   // Used on Linux
   {propName: "--in-content-box-background-odd",

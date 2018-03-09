@@ -1,0 +1,48 @@
+diff --git a/browser/themes/shared/incontentprefs/preferences.inc.css b/browser/themes/shared/incontentprefs/preferences.inc.css
+--- a/browser/themes/shared/incontentprefs/preferences.inc.css
++++ b/browser/themes/shared/incontentprefs/preferences.inc.css
+@@ -4,20 +4,16 @@
+    - You can obtain one at http://mozilla.org/MPL/2.0/. */
+ %endif
+ @namespace html "http://www.w3.org/1999/xhtml";
+ 
+ * {
+   -moz-user-select: text;
+ }
+ 
+-:root {
+-  --in-content-category-background: #fafafc;
+-}
+-
+ .main-content {
+   padding-top: 0;
+ }
+ 
+ .pane-container {
+   /* A workaround to keep the container always float on the `top: 0` (Bug 1377009) */
+   display: block;
+   width: 664px;
+diff --git a/browser/themes/shared/incontentprefs/preferences.inc.css b/browser/themes/shared/incontentprefs/preferences.inc.css
+--- a/browser/base/content/test/static/browser_parsable_css.js
++++ b/browser/base/content/test/static/browser_parsable_css.js
+@@ -109,11 -109,8 @@
+  {propName: "--theme-search-overlays-semitransparent",
+   isFromDevTools: true},
+  // Bug 1441878
+  {propName: "--theme-codemirror-gutter-background",
+   isFromDevTools: true},
+  // Bug 1441879
+  {propName: "--arrow-width",
+   isFromDevTools: true},
+-  // Bug 1442300
+-  {propName: "--in-content-category-background",
+-   isFromDevTools: false},
+
+  // Used on Linux
+  {propName: "--in-content-box-background-odd",
+   platforms: ["win", "macosx"],
+   isFromDevTools: false},
+
+  // These properties *are* actually referenced. Need to find why
+  // their reference isn't getting counted.
+  
