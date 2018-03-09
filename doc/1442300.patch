@@ -45,3 +45,4 @@ diff --git a/browser/themes/shared/incontentprefs/preferences.inc.css b/browser/
 
   // These properties *are* actually referenced. Need to find why
   // their reference isn't getting counted.
+  
