@@ -11,6 +11,7 @@ import re
 import sys
 import atexit
 import shared_telemetry_utils as utils
+import ctypes
 
 from shared_telemetry_utils import ParserError
 from collections import OrderedDict
@@ -523,6 +524,13 @@ associated with the histogram.  Returns None if no guarding is necessary."""
                     'https://wiki.mozilla.org/Modules/Toolkit#Telemetry'
                     % self._name
                     ).handle_later()
+
+        if (cytpes.c_int(low) < 0) or (ctypes.c_int(high) < 0):
+            ParseError(
+                'Either low_bucket or high_bucket is over the maximum load for an integer\n'
+                'For more information on Ctype please visit\n'
+                'https://docs.python.org/3/library/ctypes.html'
+                ).handle_later()
 
     @staticmethod
     def boolean_flag_bucket_parameters(definition):
