@@ -1,10 +1,10 @@
 # HG changeset patch
 # User raymond <concept_ray@hotmail.com>
-# Date 1520502665 18000
-#      Thu Mar 08 04:51:05 2018 -0500
-# Node ID b97e8b371b3d6e7f026f28cffc2aea4ed190c5fd
-# Parent  c550c1a10b33be2b1d02ac7b34ef37c0dc0b6096
-Bug 1222414 - Converted hardcoded colors in add-on manager to CSS variables
+# Date 1520517651 18000
+#      Thu Mar 08 09:00:51 2018 -0500
+# Node ID 7894c226cc276882c568c1b875bbf5070ad86de2
+# Parent  413923d130cdf218a971be3c28e9660b62ad1580
+Bug 1222414 - converted hardcoded colors in add-on manager to CSS variables
 
 diff --git a/toolkit/themes/shared/extensions/extensions.inc.css b/toolkit/themes/shared/extensions/extensions.inc.css
 --- a/toolkit/themes/shared/extensions/extensions.inc.css
@@ -18,21 +18,6 @@ diff --git a/toolkit/themes/shared/extensions/extensions.inc.css b/toolkit/theme
    text-align: center;
  }
  
-@@ -181,12 +181,12 @@ button.warning {
- }
- 
- .category-badge {
--  background-color: #55D4FF;
-+  background-color: var(--in-content-page-color);
-   padding: 2px 8px;
-   margin: 6px 0;
-   margin-inline-start: 6px;
-   border-radius: 100%;
--  color: #FFF;
-+  color: var(--in-content-selected-text);
-   font-weight: bold;
-   text-align: center;
- }
 @@ -263,7 +263,7 @@ button.warning {
  #header-utils-btn[open="true"] {
    padding-bottom: 0px;
@@ -65,7 +50,7 @@ diff --git a/toolkit/themes/shared/extensions/extensions.inc.css b/toolkit/theme
  #detail-contributions {
    border-radius: 2px;
 -  border: 1px solid #D2DBE8;
-+  border: 1px solid var(--in-content-box-border-colour);
++  border: 1px solid var(--in-content-box-border-color);
    margin-bottom: 2em;
    padding: 1em;
 -  background-color: #F3F7FB;
@@ -135,12 +120,3 @@ diff --git a/toolkit/themes/shared/extensions/extensions.inc.css b/toolkit/theme
  }
  
  /*** telemetry experiments ***/
-@@ -1033,7 +1033,7 @@ button.button-link:not([disabled="true"]
- 
- .addon[active="true"] .experiment-bullet,
- #detail-view[active="true"] #detail-experiment-bullet {
--  fill: rgb(106, 201, 20);
-+  fill: var(--in-content-box-background-active);
- }
- 
- /*** info UI for add-ons that have been disabled for being unsigned ***/
