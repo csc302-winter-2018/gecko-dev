@@ -4,10 +4,14 @@
 "use strict";
 
 /**
- * Tests if timing intervals are divided againts seconds when appropriate.
+ * Tests if timing intervals are divided against seconds when appropriate.
  */
+add_task(async function() {
+  // Show only few columns, so there is enough space
+  // for the waterfall.
+  await pushPref("devtools.netmonitor.visibleColumns",
+    '["status", "contentSize", "waterfall"]');
 
-add_task(async function () {
   let { tab, monitor } = await initNetMonitor(CUSTOM_GET_URL);
   info("Starting test... ");
 
@@ -17,7 +21,7 @@ add_task(async function () {
 
   let wait = waitForNetworkEvents(monitor, 2);
   // Timeout needed for having enough divisions on the time scale.
-  await ContentTask.spawn(tab.linkedBrowser, {}, async function () {
+  await ContentTask.spawn(tab.linkedBrowser, {}, async function() {
     content.wrappedJSObject.performRequests(2, null, 3000);
   });
   await wait;

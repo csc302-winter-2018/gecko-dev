@@ -247,7 +247,6 @@ public:
                            const nsAString& aTitle,
                            const nsAString& aMedia,
                            ReferrerPolicy aReferrerPolicy,
-                           mozilla::dom::Element* aScopeElement,
                            nsICSSLoaderObserver* aObserver,
                            bool* aCompleted,
                            bool* aIsAlternate);
@@ -525,7 +524,6 @@ private:
                     const nsAString& aTitle,
                     const nsAString& aMediaString,
                     dom::MediaList* aMediaList,
-                    dom::Element* aScopeElement,
                     bool aIsAlternate);
 
   nsresult InsertSheetInDoc(StyleSheet* aSheet,
@@ -592,13 +590,6 @@ private:
   //
 
 
-#ifdef MOZ_OLD_STYLE
-  nsresult DoParseSheetGecko(CSSStyleSheet* aSheet,
-                             const nsAString& aUTF16,
-                             Span<const uint8_t> aUTF8,
-                             SheetLoadData* aLoadData,
-                             bool& aCompleted);
-#endif
 
   nsresult DoParseSheetServo(ServoStyleSheet* aSheet,
                              const nsAString& aUTF16,

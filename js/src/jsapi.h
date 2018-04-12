@@ -990,7 +990,6 @@ class JS_PUBLIC_API(ContextOptions) {
 #ifdef FUZZING
         , fuzzing_(false)
 #endif
-        , expressionClosures_(false)
         , arrayProtoValues_(true)
     {
     }
@@ -1147,12 +1146,6 @@ class JS_PUBLIC_API(ContextOptions) {
     }
 #endif
 
-    bool expressionClosures() const { return expressionClosures_; }
-    ContextOptions& setExpressionClosures(bool flag) {
-        expressionClosures_ = flag;
-        return *this;
-    }
-
     bool arrayProtoValues() const { return arrayProtoValues_; }
     ContextOptions& setArrayProtoValues(bool flag) {
         arrayProtoValues_ = flag;
@@ -1189,7 +1182,6 @@ class JS_PUBLIC_API(ContextOptions) {
 #ifdef FUZZING
     bool fuzzing_ : 1;
 #endif
-    bool expressionClosures_ : 1;
     bool arrayProtoValues_ : 1;
 
 };
@@ -1986,8 +1978,7 @@ class JS_PUBLIC_API(CompartmentCreationOptions)
 {
   public:
     CompartmentCreationOptions()
-      : addonId_(nullptr),
-        traceGlobal_(nullptr),
+      : traceGlobal_(nullptr),
         zoneSpec_(NewZoneInSystemZoneGroup),
         zonePointer_(nullptr),
         invisibleToDebugger_(false),
@@ -1995,16 +1986,9 @@ class JS_PUBLIC_API(CompartmentCreationOptions)
         preserveJitCode_(false),
         cloneSingletons_(false),
         sharedMemoryAndAtomics_(false),
-        secureContext_(false)
+        secureContext_(false),
+        clampAndJitterTime_(true)
     {}
-
-    // A null add-on ID means that the compartment is not associated with an
-    // add-on.
-    JSAddonId* addonIdOrNull() const { return addonId_; }
-    CompartmentCreationOptions& setAddonId(JSAddonId* id) {
-        addonId_ = id;
-        return *this;
-    }
 
     JSTraceOp getTrace() const {
         return traceGlobal_;
@@ -2071,8 +2055,13 @@ class JS_PUBLIC_API(CompartmentCreationOptions)
         return *this;
     }
 
+    bool clampAndJitterTime() const { return clampAndJitterTime_; }
+    CompartmentCreationOptions& setClampAndJitterTime(bool flag) {
+        clampAndJitterTime_ = flag;
+        return *this;
+    }
+
   private:
-    JSAddonId* addonId_;
     JSTraceOp traceGlobal_;
     ZoneSpecifier zoneSpec_;
     void* zonePointer_; // Per zoneSpec_, either a Zone, ZoneGroup, or null.
@@ -2082,6 +2071,7 @@ class JS_PUBLIC_API(CompartmentCreationOptions)
     bool cloneSingletons_;
     bool sharedMemoryAndAtomics_;
     bool secureContext_;
+    bool clampAndJitterTime_;
 };
 
 /**
@@ -3593,14 +3583,13 @@ class JS_FRIEND_API(TransitiveCompileOptions)
         canLazilyParse(true),
         strictOption(false),
         extraWarningsOption(false),
-        expressionClosuresOption(false),
         werrorOption(false),
         asmJSOption(AsmJSOption::Disabled),
         throwOnAsmJSValidationFailureOption(false),
         forceAsync(false),
         sourceIsLazy(false),
         allowHTMLComments(true),
-        isProbablySystemOrAddonCode(false),
+        isProbablySystemCode(false),
         hideScriptFromDebugger(false),
         introductionType(nullptr),
         introductionLineno(0),
@@ -3629,14 +3618,13 @@ class JS_FRIEND_API(TransitiveCompileOptions)
     bool canLazilyParse;
     bool strictOption;
     bool extraWarningsOption;
-    bool expressionClosuresOption;
     bool werrorOption;
     AsmJSOption asmJSOption;
     bool throwOnAsmJSValidationFailureOption;
     bool forceAsync;
     bool sourceIsLazy;
     bool allowHTMLComments;
-    bool isProbablySystemOrAddonCode;
+    bool isProbablySystemCode;
     bool hideScriptFromDebugger;
 
     // |introductionType| is a statically allocated C string:
@@ -4716,6 +4704,9 @@ extern JS_PUBLIC_API(JSString*)
 JS_NewUCString(JSContext* cx, char16_t* chars, size_t length);
 
 extern JS_PUBLIC_API(JSString*)
+JS_NewUCStringDontDeflate(JSContext* cx, char16_t* chars, size_t length);
+
+extern JS_PUBLIC_API(JSString*)
 JS_NewUCStringCopyN(JSContext* cx, const char16_t* s, size_t n);
 
 extern JS_PUBLIC_API(JSString*)
@@ -4986,19 +4977,6 @@ class MOZ_RAII JSAutoByteString
     JSAutoByteString(const JSAutoByteString& another);
     JSAutoByteString& operator=(const JSAutoByteString& another);
 };
-
-namespace JS {
-
-extern JS_PUBLIC_API(JSAddonId*)
-NewAddonId(JSContext* cx, JS::HandleString str);
-
-extern JS_PUBLIC_API(JSString*)
-StringOfAddonId(JSAddonId* id);
-
-extern JS_PUBLIC_API(JSAddonId*)
-AddonIdOfObject(JSObject* obj);
-
-} // namespace JS
 
 /************************************************************************/
 /*
@@ -5892,10 +5870,13 @@ JS_SetOffthreadIonCompilationEnabled(JSContext* cx, bool enabled);
     Register(SIMULATOR_ALWAYS_INTERRUPT, "simulator.always-interrupt")      \
     Register(SPECTRE_INDEX_MASKING, "spectre.index-masking")                \
     Register(SPECTRE_OBJECT_MITIGATIONS_BARRIERS, "spectre.object-mitigations.barriers") \
+    Register(SPECTRE_OBJECT_MITIGATIONS_MISC, "spectre.object-mitigations.misc") \
     Register(SPECTRE_STRING_MITIGATIONS, "spectre.string-mitigations")      \
     Register(SPECTRE_VALUE_MASKING, "spectre.value-masking")                \
+    Register(SPECTRE_JIT_TO_CXX_CALLS, "spectre.jit-to-C++-calls")          \
     Register(ASMJS_ATOMICS_ENABLE, "asmjs.atomics.enable")                  \
-    Register(WASM_FOLD_OFFSETS, "wasm.fold-offsets")
+    Register(WASM_FOLD_OFFSETS, "wasm.fold-offsets")                        \
+    Register(WASM_DELAY_TIER2, "wasm.delay-tier2")
 
 typedef enum JSJitCompilerOption {
 #define JIT_COMPILER_DECLARE(key, str) \
@@ -6046,13 +6027,13 @@ struct TranscodeSource
 
 typedef mozilla::Vector<JS::TranscodeSource> TranscodeSources;
 
-enum TranscodeResult
+enum TranscodeResult: uint8_t
 {
     // Successful encoding / decoding.
     TranscodeResult_Ok = 0,
 
     // A warning message, is set to the message out-param.
-    TranscodeResult_Failure = 0x100,
+    TranscodeResult_Failure = 0x10,
     TranscodeResult_Failure_BadBuildId =          TranscodeResult_Failure | 0x1,
     TranscodeResult_Failure_RunOnceNotSupported = TranscodeResult_Failure | 0x2,
     TranscodeResult_Failure_AsmJSNotSupported =   TranscodeResult_Failure | 0x3,
@@ -6061,7 +6042,7 @@ enum TranscodeResult
     TranscodeResult_Failure_NotInterpretedFun =   TranscodeResult_Failure | 0x6,
 
     // There is a pending exception on the context.
-    TranscodeResult_Throw = 0x200
+    TranscodeResult_Throw = 0x20
 };
 
 extern JS_PUBLIC_API(TranscodeResult)
@@ -6505,14 +6486,14 @@ CaptureCurrentStack(JSContext* cx, MutableHandleObject stackp,
  * Here |asyncStack| is the async stack to prepare.  It is copied into
  * |cx|'s current compartment, and the newest frame is given
  * |asyncCause| as its asynchronous cause.  If |maxFrameCount| is
- * non-zero, capture at most the youngest |maxFrameCount| frames.  The
+ * |Some(n)|, capture at most the youngest |n| frames.  The
  * new stack object is written to |stackp|.  Returns true on success,
  * or sets an exception and returns |false| on error.
  */
 extern JS_PUBLIC_API(bool)
 CopyAsyncStack(JSContext* cx, HandleObject asyncStack,
                HandleString asyncCause, MutableHandleObject stackp,
-               unsigned maxFrameCount);
+               const mozilla::Maybe<size_t>& maxFrameCount);
 
 /*
  * Accessors for working with SavedFrame JSObjects

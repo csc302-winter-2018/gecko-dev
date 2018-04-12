@@ -511,7 +511,7 @@ WebRenderBridgeParent::UpdateAPZ(bool aUpdateHitTestingTree)
   if (!cbp) {
     return;
   }
-  uint64_t rootLayersId = cbp->RootLayerTreeId();
+  LayersId rootLayersId = cbp->RootLayerTreeId();
   RefPtr<WebRenderBridgeParent> rootWrbp = cbp->GetWebRenderBridgeParent();
   if (!rootWrbp) {
     return;
@@ -582,7 +582,6 @@ WebRenderBridgeParent::RecvSetDisplayList(const gfx::IntSize& aSize,
 
   AUTO_PROFILER_TRACING("Paint", "SetDisplayList");
   UpdateFwdTransactionId(aFwdTransactionId);
-  AutoClearReadLocks clearLocks(mReadLocks);
 
   // This ensures that destroy operations are always processed. It is not safe
   // to early-return from RecvDPEnd without doing so.
@@ -635,7 +634,7 @@ WebRenderBridgeParent::RecvSetDisplayList(const gfx::IntSize& aSize,
     // Pretend we composited since someone is wating for this event,
     // though DisplayList was not pushed to webrender.
     TimeStamp now = TimeStamp::Now();
-    mCompositorBridge->DidComposite(wr::AsUint64(mPipelineId), now, now);
+    mCompositorBridge->DidComposite(GetLayersId(), now, now);
   }
 
   wr::IpcResourceUpdateQueue::ReleaseShmems(this, aSmallShmems);
@@ -662,7 +661,6 @@ WebRenderBridgeParent::RecvEmptyTransaction(const FocusTarget& aFocusTarget,
 
   AUTO_PROFILER_TRACING("Paint", "EmptyTransaction");
   UpdateFwdTransactionId(aFwdTransactionId);
-  AutoClearReadLocks clearLocks(mReadLocks);
 
   // This ensures that destroy operations are always processed. It is not safe
   // to early-return without doing so.
@@ -694,7 +692,7 @@ WebRenderBridgeParent::RecvEmptyTransaction(const FocusTarget& aFocusTarget,
     // send DidComposite now.
     if (sendDidComposite) {
       TimeStamp now = TimeStamp::Now();
-      mCompositorBridge->DidComposite(wr::AsUint64(mPipelineId), now, now);
+      mCompositorBridge->DidComposite(GetLayersId(), now, now);
     }
   }
 
@@ -1296,10 +1294,10 @@ WebRenderBridgeParent::FlushTransactionIdsForEpoch(const wr::Epoch& aEpoch, cons
   return id;
 }
 
-uint64_t
+LayersId
 WebRenderBridgeParent::GetLayersId() const
 {
-  return wr::AsUint64(mPipelineId);
+  return wr::AsLayersId(mPipelineId);
 }
 
 void
@@ -1482,18 +1480,6 @@ WebRenderBridgeParent::RecvReleaseCompositable(const CompositableHandle& aHandle
     return IPC_OK();
   }
   ReleaseCompositable(aHandle);
-  return IPC_OK();
-}
-
-mozilla::ipc::IPCResult
-WebRenderBridgeParent::RecvInitReadLocks(ReadLockArray&& aReadLocks)
-{
-  if (mDestroyed) {
-    return IPC_OK();
-  }
-  if (!AddReadLocks(Move(aReadLocks))) {
-    return IPC_FAIL_NO_REASON(this);
-  }
   return IPC_OK();
 }
 

@@ -62,8 +62,8 @@ not enough available memory to perform the build. It's also possible some
 other system activity during the build is to blame.
 
 If you feel this message is not appropriate for your machine configuration,
-please file a Core :: Build Config bug at
-https://bugzilla.mozilla.org/enter_bug.cgi?product=Core&component=Build%20Config
+please file a Firefox Build System :: General bug at
+https://bugzilla.mozilla.org/enter_bug.cgi?product=Firefox%20Build%20System&component=General
 and tell us about your machine and build configuration so we can adjust the
 warning heuristic.
 ===================
@@ -1617,7 +1617,8 @@ class StaticAnalysis(MachCommandBase):
                           'the diff mode.')
     @CommandArgument('--checks', '-c', default='-*', metavar='checks',
                      help='Static analysis checks to enable.  By default, this enables only '
-                     'custom Mozilla checks, but can be any clang-tidy checks syntax.')
+                     'checks that are published here: https://mzl.la/2DRHeTh, but can be any '
+                     'clang-tidy checks syntax.')
     @CommandArgument('--jobs', '-j', default='0', metavar='jobs', type=int,
                      help='Number of concurrent jobs to run. Default is the number of CPUs.')
     @CommandArgument('--strip', '-p', default='1', metavar='NUM',
@@ -1731,7 +1732,7 @@ class StaticAnalysis(MachCommandBase):
         rc = self._get_clang_tools(verbose=verbose)
         if rc != 0:
             return rc
-        args = [self._clang_tidy_path, '-list-checks', '-checks=-*,mozilla-*']
+        args = [self._clang_tidy_path, '-list-checks', '-checks=%s' % self._get_checks()]
         return self._run_command_in_objdir(args=args, pass_thru=True)
 
     @Command('clang-format',  category='misc', description='Run clang-format on current changes')

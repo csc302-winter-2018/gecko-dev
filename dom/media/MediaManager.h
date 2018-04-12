@@ -186,6 +186,7 @@ public:
   bool IsWindowStillActive(uint64_t aWindowId) {
     return !!GetWindowListener(aWindowId);
   }
+  bool IsWindowListenerStillActive(GetUserMediaWindowListener* aListener);
   // Note: also calls aListener->Remove(), even if inactive
   void RemoveFromWindowList(uint64_t aWindowID,
     GetUserMediaWindowListener *aListener);
@@ -288,7 +289,6 @@ private:
 
   media::CoatCheck<PledgeSourceSet> mOutstandingPledges;
   media::CoatCheck<PledgeChar> mOutstandingCharPledges;
-  media::CoatCheck<PledgeVoid> mOutstandingVoidPledges;
   nsTArray<nsString> mDeviceIDs;
 public:
   media::CoatCheck<media::Pledge<nsCString>> mGetPrincipalKeyPledges;

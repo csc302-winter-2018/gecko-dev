@@ -14,7 +14,7 @@
 
 #include <limits>
 #include <type_traits>
-#include "nsString.h"
+#include "nsStringFwd.h"
 #include "nsCSSPropertyID.h"
 #include "nsStyleStructFwd.h"
 #include "nsCSSKeywords.h"
@@ -204,8 +204,7 @@ static_assert((CSS_PROPERTY_PARSE_PROPERTY_MASK &
 // Does this property support the unitless length quirk in quirks mode?
 #define CSS_PROPERTY_UNITLESS_LENGTH_QUIRK        (1<<16)
 
-// Is this property (which must be a shorthand) really an alias?
-#define CSS_PROPERTY_IS_ALIAS                     (1<<17)
+// There's a free bit here.
 
 // Does the property apply to ::placeholder?
 #define CSS_PROPERTY_APPLIES_TO_PLACEHOLDER       (1<<18)
@@ -645,7 +644,7 @@ public:
     // In the child process, assert that we're not trying to parse stylesheets
     // before we've gotten all our prefs.
     MOZ_ASSERT_IF(!XRE_IsParentProcess(),
-                  mozilla::Preferences::AreAllPrefsSetInContentProcess());
+                  mozilla::Preferences::ArePrefsInitedInContentProcess());
     return gPropertyEnabled[aProperty];
   }
 

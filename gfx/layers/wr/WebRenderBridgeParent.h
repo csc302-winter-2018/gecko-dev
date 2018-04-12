@@ -67,8 +67,6 @@ public:
                                               const TextureInfo& aInfo) override;
   mozilla::ipc::IPCResult RecvReleaseCompositable(const CompositableHandle& aHandle) override;
 
-  mozilla::ipc::IPCResult RecvInitReadLocks(ReadLockArray&& aReadLocks) override;
-
   mozilla::ipc::IPCResult RecvCreate(const gfx::IntSize& aSize) override;
   mozilla::ipc::IPCResult RecvShutdown() override;
   mozilla::ipc::IPCResult RecvShutdownSync() override;
@@ -207,7 +205,7 @@ private:
   bool AddExternalImage(wr::ExternalImageId aExtId, wr::ImageKey aKey,
                         wr::TransactionBuilder& aResources);
 
-  uint64_t GetLayersId() const;
+  LayersId GetLayersId() const;
   void ProcessWebRenderParentCommands(const InfallibleTArray<WebRenderParentCommand>& aCommands);
 
   void ClearResources();

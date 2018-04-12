@@ -5,7 +5,7 @@
 /* exported Toolbox, restartNetMonitor, teardown, waitForExplicitFinish,
    verifyRequestItemTarget, waitFor, testFilterButtons,
    performRequestsInContent, waitForNetworkEvents, selectIndexAndWaitForSourceEditor,
-   testColumnsAlignment, hideColumn, showColumn */
+   testColumnsAlignment, hideColumn, showColumn, performRequests */
 
 "use strict";
 
@@ -40,6 +40,7 @@ const CONTENT_TYPE_WITHOUT_CACHE_REQUESTS = 8;
 const CYRILLIC_URL = EXAMPLE_URL + "html_cyrillic-test-page.html";
 const STATUS_CODES_URL = EXAMPLE_URL + "html_status-codes-test-page.html";
 const POST_DATA_URL = EXAMPLE_URL + "html_post-data-test-page.html";
+const POST_ARRAY_DATA_URL = EXAMPLE_URL + "html_post-array-data-test-page.html";
 const POST_JSON_URL = EXAMPLE_URL + "html_post-json-test-page.html";
 const POST_RAW_URL = EXAMPLE_URL + "html_post-raw-test-page.html";
 const POST_RAW_WITH_HEADERS_URL = EXAMPLE_URL + "html_post-raw-with-headers-test-page.html";
@@ -145,7 +146,7 @@ function waitForTimelineMarkers(monitor) {
   return new Promise(resolve => {
     let markers = [];
 
-    function handleTimelineEvent(_, marker) {
+    function handleTimelineEvent(marker) {
       info(`Got marker: ${marker.name}`);
       markers.push(marker);
       if (markers.length == 2) {
@@ -184,14 +185,14 @@ function waitForAllRequestsFinished(monitor) {
     // Key is the request id, value is a boolean - is request finished or not?
     let requests = new Map();
 
-    function onRequest(_, id) {
+    function onRequest(id) {
       let networkInfo = getNetworkRequest(id);
       let { url } = networkInfo.request;
       info(`Request ${id} for ${url} not yet done, keep waiting...`);
       requests.set(id, false);
     }
 
-    function onTimings(_, id) {
+    function onTimings(id) {
       let networkInfo = getNetworkRequest(id);
       let { url } = networkInfo.request;
       info(`Request ${id} for ${url} done`);
@@ -242,13 +243,13 @@ let updatedTypes = [
 // Start collecting all networkEventUpdate event when panel is opened.
 // removeTab() should be called once all corresponded RECEIVED_* events finished.
 function startNetworkEventUpdateObserver(panelWin) {
-  updatingTypes.forEach((type) => panelWin.on(type, (event, actor) => {
-    let key = actor + "-" + updatedTypes[updatingTypes.indexOf(event)];
+  updatingTypes.forEach((type) => panelWin.on(type, actor => {
+    let key = actor + "-" + updatedTypes[updatingTypes.indexOf(type)];
     finishedQueue[key] = finishedQueue[key] ? finishedQueue[key] + 1 : 1;
   }));
 
-  updatedTypes.forEach((type) => panelWin.on(type, (event, actor) => {
-    let key = actor + "-" + event;
+  updatedTypes.forEach((type) => panelWin.on(type, actor => {
+    let key = actor + "-" + type;
     finishedQueue[key] = finishedQueue[key] ? finishedQueue[key] - 1 : -1;
   }));
 }
@@ -271,7 +272,7 @@ async function waitForAllNetworkUpdateEvents() {
 function initNetMonitor(url, enableCache) {
   info("Initializing a network monitor pane.");
 
-  return (async function () {
+  return (async function() {
     let tab = await addTab(url);
     info("Net tab added successfully: " + url);
 
@@ -316,7 +317,7 @@ function initNetMonitor(url, enableCache) {
 function restartNetMonitor(monitor, newUrl) {
   info("Restarting the specified network monitor.");
 
-  return (async function () {
+  return (async function() {
     let tab = monitor.toolbox.target.tab;
     let url = newUrl || tab.linkedBrowser.currentURI.spec;
 
@@ -334,7 +335,7 @@ function restartNetMonitor(monitor, newUrl) {
 function teardown(monitor) {
   info("Destroying the specified network monitor.");
 
-  return (async function () {
+  return (async function() {
     let tab = monitor.toolbox.target.tab;
 
     await waitForAllNetworkUpdateEvents();
@@ -353,7 +354,7 @@ function waitForNetworkEvents(monitor, getRequests) {
     let networkEvent = 0;
     let payloadReady = 0;
 
-    function onNetworkEvent(event, actor) {
+    function onNetworkEvent(actor) {
       let networkInfo = getNetworkRequest(actor);
       if (!networkInfo) {
         // Must have been related to reloading document to disable cache.
@@ -361,10 +362,10 @@ function waitForNetworkEvents(monitor, getRequests) {
         return;
       }
       networkEvent++;
-      maybeResolve(event, actor, networkInfo);
+      maybeResolve(EVENTS.NETWORK_EVENT, actor, networkInfo);
     }
 
-    function onPayloadReady(event, actor) {
+    function onPayloadReady(actor) {
       let networkInfo = getNetworkRequest(actor);
       if (!networkInfo) {
         // Must have been related to reloading document to disable cache.
@@ -372,7 +373,7 @@ function waitForNetworkEvents(monitor, getRequests) {
         return;
       }
       payloadReady++;
-      maybeResolve(event, actor, networkInfo);
+      maybeResolve(EVENTS.PAYLOAD_READY, actor, networkInfo);
     }
 
     function maybeResolve(event, actor, networkInfo) {
@@ -743,4 +744,17 @@ async function selectIndexAndWaitForSourceEditor(monitor, index) {
     await waitDOM;
   }
   await onResponseContent;
+}
+
+/**
+ * Helper function for executing XHRs on a test page.
+ *
+ * @param {Number} count Number of requests to be executed.
+ */
+async function performRequests(monitor, tab, count) {
+  let wait = waitForNetworkEvents(monitor, count);
+  await ContentTask.spawn(tab.linkedBrowser, count, requestCount => {
+    content.wrappedJSObject.performRequests(requestCount);
+  });
+  await wait;
 }

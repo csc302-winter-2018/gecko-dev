@@ -77,7 +77,7 @@ class xptiTypelibGuts
 public:
     static xptiTypelibGuts* Create(const XPTHeader* aHeader);
 
-    uint16_t            GetEntryCount() const {return mHeader->num_interfaces;}
+    uint16_t GetEntryCount() const {return mHeader->mNumInterfaces;}
 
     void                SetEntryAt(uint16_t i, xptiInterfaceEntry* ptr)
     {
@@ -151,9 +151,7 @@ private:
 class xptiInterfaceEntry
 {
 public:
-    static xptiInterfaceEntry* Create(const char* aName,
-                                      const nsID& aIID,
-                                      const XPTInterfaceDescriptor* aDescriptor,
+    static xptiInterfaceEntry* Create(const XPTInterfaceDirectoryEntry* aEntry,
                                       xptiTypelibGuts* aTypelib);
 
     enum {
@@ -249,9 +247,7 @@ public:
     nsresult GetIIDForParamNoAlloc(uint16_t methodIndex, const nsXPTParamInfo * param, nsIID *iid);
 
 private:
-    xptiInterfaceEntry(const char* aName,
-                       const nsID& aIID,
-                       const XPTInterfaceDescriptor* aDescriptor,
+    xptiInterfaceEntry(const XPTInterfaceDirectoryEntry* aDescriptor,
                        xptiTypelibGuts* aTypelib);
     ~xptiInterfaceEntry();
 

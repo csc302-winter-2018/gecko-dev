@@ -1,4 +1,3 @@
-/* eslint-disable mozilla/no-cpows-in-tests */
 
 function whenMainPaneLoadedFinished() {
   return new Promise(function(resolve, reject) {
@@ -45,5 +44,5 @@ add_task(async function() {
     ]
   });
 
-  await BrowserTestUtils.removeTab(gBrowser.selectedTab);
+  BrowserTestUtils.removeTab(gBrowser.selectedTab);
 });

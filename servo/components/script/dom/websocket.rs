@@ -24,11 +24,13 @@ use dom_struct::dom_struct;
 use ipc_channel::ipc::{self, IpcReceiver, IpcSender};
 use js::jsapi::{JSAutoCompartment, JSObject};
 use js::jsval::UndefinedValue;
-use js::typedarray::{ArrayBuffer, CreateWith};
+use js::rust::CustomAutoRooterGuard;
+use js::typedarray::{ArrayBuffer, ArrayBufferView, CreateWith};
 use net_traits::{CoreResourceMsg, FetchChannels};
 use net_traits::{WebSocketDomAction, WebSocketNetworkEvent};
 use net_traits::MessageData;
 use net_traits::request::{RequestInit, RequestMode};
+use profile_traits::ipc as ProfiledIpc;
 use script_runtime::CommonScriptMsg;
 use script_runtime::ScriptThreadEventCategory::WebSocketEvent;
 use servo_url::ServoUrl;
@@ -181,7 +183,8 @@ impl WebSocket {
                 IpcReceiver<WebSocketDomAction>) = ipc::channel().unwrap();
         let (resource_event_sender, dom_event_receiver):
                 (IpcSender<WebSocketNetworkEvent>,
-                IpcReceiver<WebSocketNetworkEvent>) = ipc::channel().unwrap();
+                 ProfiledIpc::IpcReceiver<WebSocketNetworkEvent>) =
+            ProfiledIpc::channel(global.time_profiler_chan().clone()).unwrap();
 
         // Step 8.
         let request = RequestInit {
@@ -345,6 +348,34 @@ impl WebSocketMethods for WebSocket {
             let _ = my_sender.send(WebSocketDomAction::SendMessage(MessageData::Binary(bytes)));
         }
 
+        Ok(())
+    }
+
+    // https://html.spec.whatwg.org/multipage/#dom-websocket-send
+    fn Send__(&self, array: CustomAutoRooterGuard<ArrayBuffer>) -> ErrorResult {
+        let bytes = array.to_vec();
+        let data_byte_len = bytes.len();
+        let send_data = self.send_impl(data_byte_len as u64)?;
+
+        if send_data {
+            let mut other_sender = self.sender.borrow_mut();
+            let my_sender = other_sender.as_mut().unwrap();
+            let _ = my_sender.send(WebSocketDomAction::SendMessage(MessageData::Binary(bytes)));
+        }
+        Ok(())
+    }
+
+    // https://html.spec.whatwg.org/multipage/#dom-websocket-send
+    fn Send___(&self, array: CustomAutoRooterGuard<ArrayBufferView>) -> ErrorResult {
+        let bytes = array.to_vec();
+        let data_byte_len = bytes.len();
+        let send_data = self.send_impl(data_byte_len as u64)?;
+
+        if send_data {
+            let mut other_sender = self.sender.borrow_mut();
+            let my_sender = other_sender.as_mut().unwrap();
+            let _ = my_sender.send(WebSocketDomAction::SendMessage(MessageData::Binary(bytes)));
+        }
         Ok(())
     }
 

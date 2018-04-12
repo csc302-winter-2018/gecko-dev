@@ -31,6 +31,7 @@ async function createXULExtension(details) {
       id: details.id,
       name: details.name,
       version: "0.1",
+      bootstrap: true,
       targetApplications: [{
         id: "toolkit@mozilla.org",
         minVersion: "0",
@@ -136,7 +137,6 @@ add_task(async function() {
   is(gBrowser.currentURI.spec, "about:addons", "Foreground tab is at about:addons");
 
   const VIEW = "addons://list/extension";
-  // eslint-disable-next-line mozilla/no-cpows-in-tests
   let win = gBrowser.selectedBrowser.contentWindow;
   ok(!win.gViewController.isLoading, "about:addons view is fully loaded");
   is(win.gViewController.currentViewId, VIEW, "about:addons is at extensions list");
@@ -156,7 +156,7 @@ add_task(async function() {
   is(addon3.userDisabled, true, "Addon 3 should still be disabled");
   is(addon4.userDisabled, true, "Addon 4 should still be disabled");
 
-  await BrowserTestUtils.removeTab(gBrowser.selectedTab);
+  BrowserTestUtils.removeTab(gBrowser.selectedTab);
 
   // Should still have 3 entries in the hamburger menu
   await PanelUI.show();
@@ -172,7 +172,6 @@ add_task(async function() {
   // Again we should be at the extentions list in about:addons
   is(gBrowser.currentURI.spec, "about:addons", "Foreground tab is at about:addons");
 
-  // eslint-disable-next-line mozilla/no-cpows-in-tests
   win = gBrowser.selectedBrowser.contentWindow;
   ok(!win.gViewController.isLoading, "about:addons view is fully loaded");
   is(win.gViewController.currentViewId, VIEW, "about:addons is at extensions list");
@@ -261,5 +260,5 @@ add_task(async function() {
     addon.uninstall();
   }
 
-  await BrowserTestUtils.removeTab(gBrowser.selectedTab);
+  BrowserTestUtils.removeTab(gBrowser.selectedTab);
 });

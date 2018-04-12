@@ -96,35 +96,11 @@ let propNameWhitelist = [
   // Bug 1441837
   {propName: "--in-content-category-text-active",
    isFromDevTools: false},
-  // Bug 1441844
-  {propName: "--chrome-nav-bar-separator-color",
-   isFromDevTools: false},
   // Bug 1441855
   {propName: "--chrome-nav-buttons-background",
    isFromDevTools: false},
   // Bug 1441855
   {propName: "--chrome-nav-buttons-hover-background",
-   isFromDevTools: false},
-  // Bug 1441857
-  {propName: "--muteButton-width",
-   isFromDevTools: false},
-  // Bug 1441857
-  {propName: "--closedCaptionButton-width",
-   isFromDevTools: false},
-  // Bug 1441857
-  {propName: "--fullscreenButton-width",
-   isFromDevTools: false},
-  // Bug 1441857
-  {propName: "--durationSpan-width",
-   isFromDevTools: false},
-  // Bug 1441857
-  {propName: "--durationSpan-width-long",
-   isFromDevTools: false},
-  // Bug 1441857
-  {propName: "--positionDurationBox-width",
-   isFromDevTools: false},
-  // Bug 1441857
-  {propName: "--positionDurationBox-width-long",
    isFromDevTools: false},
   // Bug 1441929
   {propName: "--theme-search-overlays-semitransparent",
@@ -132,13 +108,29 @@ let propNameWhitelist = [
   // Bug 1441878
   {propName: "--theme-codemirror-gutter-background",
    isFromDevTools: true},
-  // Bug 1441879
-  {propName: "--arrow-width",
-   isFromDevTools: true},
-  // Bug 1442300
-  {propName: "--in-content-category-background",
+  // These custom properties are retrieved directly from CSSOM
+  // in videocontrols.xml to get pre-defined style instead of computed
+  // dimensions, which is why they are not referenced by CSS.
+  {propName: "--clickToPlay-width",
    isFromDevTools: false},
-
+  {propName: "--playButton-width",
+   isFromDevTools: false},
+  {propName: "--muteButton-width",
+   isFromDevTools: false},
+  {propName: "--castingButton-width",
+   isFromDevTools: false},
+  {propName: "--closedCaptionButton-width",
+   isFromDevTools: false},
+  {propName: "--fullscreenButton-width",
+   isFromDevTools: false},
+  {propName: "--durationSpan-width",
+   isFromDevTools: false},
+  {propName: "--durationSpan-width-long",
+   isFromDevTools: false},
+  {propName: "--positionDurationBox-width",
+   isFromDevTools: false},
+  {propName: "--positionDurationBox-width-long",
+   isFromDevTools: false},
   // Used on Linux
   {propName: "--in-content-box-background-odd",
    platforms: ["win", "macosx"],
@@ -368,16 +360,16 @@ add_task(async function checkAllTheCSS() {
   // Parse and remove all manifests from the list.
   // NOTE that this must be done before filtering out devtools paths
   // so that all chrome paths can be recorded.
-  let manifestPromises = [];
+  let manifestURIs = [];
   uris = uris.filter(uri => {
     if (uri.pathQueryRef.endsWith(".manifest")) {
-      manifestPromises.push(parseManifest(uri));
+      manifestURIs.push(uri);
       return false;
     }
     return true;
   });
   // Wait for all manifest to be parsed
-  await Promise.all(manifestPromises);
+  await throttledMapPromises(manifestURIs, parseManifest);
 
   // filter out either the devtools paths or the non-devtools paths:
   let isDevtools = SimpleTest.harnessParameters.subsuite == "devtools";
@@ -421,8 +413,7 @@ add_task(async function checkAllTheCSS() {
   }
 
   // Wait for all the files to have actually loaded:
-  allPromises = allPromises.map(loadCSS);
-  await Promise.all(allPromises);
+  await throttledMapPromises(allPromises, loadCSS);
 
   // Check if all the files referenced from CSS actually exist.
   for (let [image, references] of imageURIsToReferencesMap) {

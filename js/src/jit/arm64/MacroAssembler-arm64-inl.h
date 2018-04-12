@@ -359,6 +359,7 @@ MacroAssembler::sub32FromStackPtrWithPatch(Register dest)
 {
     vixl::UseScratchRegisterScope temps(this);
     const ARMRegister scratch = temps.AcquireX();
+    AutoForbidPools afp(this, /* max number of instructions in scope = */ 3);
     CodeOffset offs = CodeOffset(currentOffset());
     movz(scratch, 0, 0);
     movk(scratch, 0, 16);
@@ -1314,9 +1315,9 @@ MacroAssembler::branchTruncateDoubleToInt32(FloatRegister src, Register dest, La
     convertDoubleToInt32(src, dest, fail);
 }
 
-template <typename T, typename L>
+template <typename T>
 void
-MacroAssembler::branchAdd32(Condition cond, T src, Register dest, L label)
+MacroAssembler::branchAdd32(Condition cond, T src, Register dest, Label* label)
 {
     adds32(src, dest);
     B(label, cond);
@@ -1867,7 +1868,14 @@ MacroAssembler::spectreMovePtr(Condition cond, Register src, Register dest)
 }
 
 void
-MacroAssembler::boundsCheck32ForLoad(Register index, Register length, Register scratch,
+MacroAssembler::spectreZeroRegister(Condition cond, Register, Register dest)
+{
+    Csel(ARMRegister(dest, 64), ARMRegister(dest, 64), vixl::xzr,
+         Assembler::InvertCondition(cond));
+}
+
+void
+MacroAssembler::spectreBoundsCheck32(Register index, Register length, Register scratch,
                                      Label* failure)
 {
     MOZ_ASSERT(index != length);
@@ -1881,7 +1889,7 @@ MacroAssembler::boundsCheck32ForLoad(Register index, Register length, Register s
 }
 
 void
-MacroAssembler::boundsCheck32ForLoad(Register index, const Address& length, Register scratch,
+MacroAssembler::spectreBoundsCheck32(Register index, const Address& length, Register scratch,
                                      Label* failure)
 {
     MOZ_ASSERT(index != length.base);
@@ -1955,25 +1963,6 @@ MacroAssembler::clampIntToUint8(Register reg)
     Csel(reg32, reg32, vixl::wzr, Assembler::GreaterThanOrEqual);
     Mov(scratch32, Operand(0xff));
     Csel(reg32, reg32, scratch32, Assembler::LessThanOrEqual);
-}
-
-// ========================================================================
-// wasm support
-
-template <class L>
-void
-MacroAssembler::wasmBoundsCheck(Condition cond, Register index, Register boundsCheckLimit, L label)
-{
-    // Not used on ARM64, we rely on signal handling instead
-    MOZ_CRASH("NYI - wasmBoundsCheck");
-}
-
-template <class L>
-void
-MacroAssembler::wasmBoundsCheck(Condition cond, Register index, Address boundsCheckLimit, L label)
-{
-    // Not used on ARM64, we rely on signal handling instead
-    MOZ_CRASH("NYI - wasmBoundsCheck");
 }
 
 //}}} check_macroassembler_style

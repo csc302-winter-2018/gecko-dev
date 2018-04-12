@@ -899,7 +899,7 @@ public abstract class GeckoApp extends GeckoActivity
     @Override
     public void onContextMenu(final GeckoSession session, final int screenX,
                               final int screenY, final String uri,
-                              final String elementSrc) {
+                              int elementType, final String elementSrc) {
     }
 
     protected void setFullScreen(final boolean fullscreen) {
@@ -1075,7 +1075,7 @@ public abstract class GeckoApp extends GeckoActivity
         final GeckoSession session = new GeckoSession();
         // If the view already has a session, we need to ensure it is closed.
         if (mLayerView.getSession() != null) {
-            mLayerView.getSession().closeWindow();
+            mLayerView.getSession().close();
         }
         mLayerView.setSession(session);
         mLayerView.setOverScrollMode(View.OVER_SCROLL_NEVER);

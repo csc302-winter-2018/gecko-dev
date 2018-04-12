@@ -103,87 +103,28 @@
       <!-- throws exception for unknown schemes -->
       <method name="loadURI">
         <parameter name="aURI"/>
-        <parameter name="aReferrerURI"/>
-        <parameter name="aCharset"/>
+        <parameter name="aParams"/>
         <body>
           <![CDATA[
-            const nsIWebNavigation = Ci.nsIWebNavigation;
-            const flags = nsIWebNavigation.LOAD_FLAGS_NONE;
-            this._wrapURIChangeCall(() =>
-              this.loadURIWithFlags(aURI, flags, aReferrerURI, aCharset));
-          ]]>
-        </body>
-      </method>
-
-      <!-- throws exception for unknown schemes -->
-      <method name="loadURIWithFlags">
-        <parameter name="aURI"/>
-        <parameter name="aFlags"/>
-        <parameter name="aReferrerURI"/>
-        <parameter name="aCharset"/>
-        <parameter name="aPostData"/>
-        <body>
-          <![CDATA[
-            if (!aURI)
+            if (!aURI) {
               aURI = "about:blank";
-
-            var aReferrerPolicy = Ci.nsIHttpChannel.REFERRER_POLICY_UNSET;
-            var aTriggeringPrincipal;
-
-            // Check for loadURIWithFlags(uri, { ... });
-            var params = arguments[1];
-            if (params && typeof(params) == "object") {
-              aFlags = params.flags;
-              aReferrerURI = params.referrerURI;
-              if ("referrerPolicy" in params) {
-                aReferrerPolicy = params.referrerPolicy;
-              }
-              if ("triggeringPrincipal" in params) {
-                aTriggeringPrincipal = params.triggeringPrincipal;
-              }
-              aCharset = params.charset;
-              aPostData = params.postData;
             }
+
+            let {
+              flags = Ci.nsIWebNavigation.LOAD_FLAGS_NONE,
+              referrerURI,
+              referrerPolicy = Ci.nsIHttpChannel.REFERRER_POLICY_UNSET,
+              triggeringPrincipal,
+              postData,
+            } = aParams || {};
 
             this._wrapURIChangeCall(() =>
               this.webNavigation.loadURIWithOptions(
-                  aURI, aFlags, aReferrerURI, aReferrerPolicy,
-                  aPostData, null, null, aTriggeringPrincipal));
+                  aURI, flags, referrerURI, referrerPolicy,
+                  postData, null, null, triggeringPrincipal));
           ]]>
         </body>
       </method>
-
-      <method name="goHome">
-        <body>
-          <![CDATA[
-            try {
-              this.loadURI(this.homePage);
-            } catch (e) {
-            }
-          ]]>
-        </body>
-      </method>
-
-      <property name="homePage">
-        <getter>
-          <![CDATA[
-            var uri;
-
-            if (this.hasAttribute("homepage"))
-              uri = this.getAttribute("homepage");
-            else
-              uri = "http://www.mozilla.org/"; // widget pride
-
-            return uri;
-          ]]>
-        </getter>
-        <setter>
-          <![CDATA[
-            this.setAttribute("homepage", val);
-            return val;
-          ]]>
-        </setter>
-      </property>
 
       <method name="gotoIndex">
         <parameter name="aIndex"/>
@@ -688,7 +629,7 @@
         <body>
           <![CDATA[
             let event = document.createEvent("Events");
-            event.initEvent("DOMUpdatePageReport", true, true);
+            event.initEvent("DOMUpdateBlockedPopups", true, true);
             this.dispatchEvent(event);
           ]]>
         </body>
@@ -721,11 +662,6 @@
       </method>
 
       <field name="blockedPopups">null</field>
-
-      <!-- Obsolete name for blockedPopups. Used by android. -->
-      <property name="pageReport"
-         onget="return this.blockedPopups;"
-         readonly="true"/>
 
       <method name="audioPlaybackStarted">
         <body>
@@ -1300,6 +1236,7 @@
             // We set this attribute on the element so that mousemove
             // events can be handled by browser-content.js.
             popup.setAttribute("mousethrough", "always");
+            popup.setAttribute("consumeoutsideclicks", "true");
             popup.setAttribute("rolluponmousewheel", "true");
             popup.setAttribute("hidden", "true");
             return popup;

@@ -3,8 +3,6 @@
 /* Any copyright is dedicated to the Public Domain.
  * http://creativecommons.org/publicdomain/zero/1.0/ */
 
-/* import-globals-from head.js */
-
 // Test navigation of webconsole contents via ctrl-a, ctrl-e, ctrl-p, ctrl-n
 // see https://bugzilla.mozilla.org/show_bug.cgi?id=804845
 //
@@ -16,7 +14,7 @@
 const TEST_URI = "data:text/html;charset=utf-8,Web Console test for " +
                  "bug 804845 and bug 619598";
 
-add_task(async function () {
+add_task(async function() {
   const {jsterm} = await openNewTabAndConsole(TEST_URI);
 
   ok(!jsterm.getInputValue(), "jsterm.getInputValue() is empty");

@@ -52,8 +52,8 @@ div {
 <script>
 'use strict';
 
-function observeStyling(frameCount, onFrame) {
-  var docShell =
+function getDocShellForObservingRestyles() {
+  const docShell =
     SpecialPowers.wrap(window)
                  .QueryInterface(SpecialPowers.Ci.nsIInterfaceRequestor)
                  .getInterface(SpecialPowers.Ci.nsIWebNavigation)
@@ -61,6 +61,18 @@ function observeStyling(frameCount, onFrame) {
 
   docShell.recordProfileTimelineMarkers = true;
   docShell.popProfileTimelineMarkers();
+
+  return docShell;
+}
+
+// Returns the animation restyle markers observed during |frameCount| refresh
+// driver ticks.  This function is typically used to count the number of
+// restyles that take place as part of the style update that happens on each
+// refresh driver tick, as opposed to synchronous restyles triggered by script.
+//
+// For the latter observeAnimSyncStyling (below) should be used.
+function observeStyling(frameCount, onFrame) {
+  let docShell = getDocShellForObservingRestyles();
 
   return new Promise(resolve => {
     return waitForAnimationFrames(frameCount, onFrame).then(() => {
@@ -71,6 +83,24 @@ function observeStyling(frameCount, onFrame) {
       });
       resolve(stylingMarkers);
     });
+  });
+}
+
+// Returns observed animation restyle markers when |funcToMakeRestyleHappen|
+// is called.
+// NOTE: This function is synchronous version of the above observeStyling().
+// Unlike the above observeStyling, this function takes a callback function,
+// |funcToMakeRestyleHappen|, which may be expected to trigger a synchronous
+// restyles, and returns any restyle markers produced by calling that function.
+function observeAnimSyncStyling(funcToMakeRestyleHappen) {
+  let docShell = getDocShellForObservingRestyles();
+
+  funcToMakeRestyleHappen();
+
+  let markers = docShell.popProfileTimelineMarkers();
+  docShell.recordProfileTimelineMarkers = false;
+  return markers.filter((marker, index) => {
+    return marker.name == 'Styles' && marker.isAnimationOnly;
   });
 }
 
@@ -404,7 +434,7 @@ waitForAllPaints(() => {
       var parentElement = addDiv(null,
         { style: 'overflow-y: scroll; height: 20px;' });
       var div = addDiv(null,
-        { style: 'animation: rotate 100s; position: relative; top: 100px;' });
+        { style: 'animation: rotate 100s infinite; position: relative; top: 100px;' });
       parentElement.appendChild(div);
       var animation = div.getAnimations()[0];
       var timeAtStart = document.timeline.currentTime;
@@ -450,7 +480,7 @@ waitForAllPaints(() => {
       var parentElement = addDiv(null,
         { style: 'overflow-y: scroll; height: 20px;' });
       var div = addDiv(null,
-        { style: 'animation: rotate 100s; position: relative; top: 100px;' });
+        { style: 'animation: rotate 100s infinite; position: relative; top: 100px;' });
       parentElement.appendChild(div);
       var animation = div.getAnimations()[0];
       var timeAtStart = document.timeline.currentTime;
@@ -503,7 +533,7 @@ waitForAllPaints(() => {
       var parentElement = addDiv(null,
         { style: 'overflow: hidden;' });
       var div = addDiv(null,
-        { style: 'animation: move-in 100s;' });
+        { style: 'animation: move-in 100s infinite;' });
       parentElement.appendChild(div);
       var animation = div.getAnimations()[0];
       var timeAtStart = document.timeline.currentTime;
@@ -548,7 +578,7 @@ waitForAllPaints(() => {
       var parentElement = addDiv(null,
         { style: 'overflow: hidden;' });
       var div = addDiv(null,
-        { style: 'animation: move-in 100s;' });
+        { style: 'animation: move-in 100s infinite;' });
       parentElement.appendChild(div);
       var animation = div.getAnimations()[0];
       var timeAtStart = document.timeline.currentTime;
@@ -584,6 +614,29 @@ waitForAllPaints(() => {
       await ensureElementRemoval(parentElement);
     }
   );
+
+  add_task(async function finite_transform_animations_in_out_of_view_element() {
+    var parentElement = addDiv(null, { style: 'overflow: hidden;' });
+    var div = addDiv(null);
+    var animation =
+      div.animate({ transform: [ 'translateX(120%)', 'translateX(100%)' ] },
+                                // This animation will move a bit but
+                                // will remain out-of-view.
+                  100 * MS_PER_SEC);
+    parentElement.appendChild(div);
+
+    await animation.ready;
+    ok(!SpecialPowers.wrap(animation).isRunningOnCompositor);
+
+    const expectedRestyleCount = tweakExpectedRestyleCount(animation, 20);
+
+    var markers = await observeStyling(expectedRestyleCount);
+    is(markers.length, expectedRestyleCount,
+       'Finite transform animation in out-of-view element should never be ' +
+       'throttled');
+
+    await ensureElementRemoval(parentElement);
+  });
 
   add_task(async function restyling_main_thread_animations_in_scrolled_out_element() {
     var parentElement = addDiv(null,
@@ -1634,6 +1687,48 @@ waitForAllPaints(() => {
     }
   );
 
+  add_task(async function no_flush_on_getAnimations() {
+    var div = addDiv(null);
+    var animation =
+      div.animate({ opacity: [ '0', '1' ] }, 100 * MS_PER_SEC);
+    await animation.ready;
+
+    ok(SpecialPowers.wrap(animation).isRunningOnCompositor);
+
+    var markers = observeAnimSyncStyling(() => {
+      is(div.getAnimations().length, 1, 'There should be one animation');
+    });
+    is(markers.length, 0,
+       'Element.getAnimations() should not flush throttled animation style');
+
+    await ensureElementRemoval(div);
+  });
+
+  add_task(async function restyling_for_throttled_animation_on_getAnimations() {
+    var div = addDiv(null, { style: 'animation: opacity 100s' });
+    var animation = div.getAnimations()[0];
+
+    await animation.ready;
+    ok(SpecialPowers.wrap(animation).isRunningOnCompositor);
+
+    var markers = observeAnimSyncStyling(() => {
+      div.style.animationDuration = '0s';
+      is(div.getAnimations().length, 0, 'There should be no animation');
+    });
+
+    if (isServo) {
+      is(markers.length, 1, // For discarding the throttled animation.
+         'Element.getAnimations() should flush throttled animation style so ' +
+         'that the throttled animation is discarded');
+    } else {
+      is(markers.length, 2, // One is done through UpdateOnlyAnimationStyles(),
+                            // the other is for discarding the animation.
+         'Element.getAnimations() should flush throttled animation style that ' +
+         'the throttled animation is discarded');
+    }
+
+    await ensureElementRemoval(div);
+  });
 });
 
 </script>

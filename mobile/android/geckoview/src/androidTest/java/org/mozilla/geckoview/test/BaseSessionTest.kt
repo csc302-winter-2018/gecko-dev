@@ -4,6 +4,7 @@
 package org.mozilla.geckoview.test
 
 import android.os.Parcel
+import android.support.test.InstrumentationRegistry
 import org.mozilla.geckoview.GeckoSession
 import org.mozilla.geckoview.test.rule.GeckoSessionTestRule
 
@@ -38,6 +39,10 @@ open class BaseSessionTest(noErrorCollector: Boolean = false) {
         }
     }
 
+    fun GeckoSession.getTestBytes(path: String) =
+            InstrumentationRegistry.getTargetContext().resources.assets
+                    .open(path.removePrefix("/assets/")).readBytes()
+
     fun GeckoSession.loadTestPath(path: String) =
             this.loadUri(GeckoSessionTestRule.APK_URI_PREFIX + path.removePrefix("/"))
 
@@ -58,7 +63,7 @@ open class BaseSessionTest(noErrorCollector: Boolean = false) {
         }
     }
 
-    fun GeckoSession.openWindow() =
+    fun GeckoSession.open() =
             sessionRule.openSession(this)
 
     fun GeckoSession.waitForPageStop() =

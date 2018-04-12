@@ -142,7 +142,6 @@ devtools/client/webaudioeditor/**
 devtools/client/webconsole/net/**
 !devtools/client/webconsole/new-console-output/test/mochitest/**
 devtools/client/webconsole/test/**
-devtools/client/webconsole/webconsole-connection-proxy.js
 devtools/client/webconsole/webconsole.js
 devtools/client/webide/**
 !devtools/client/webide/components/webideCli.js
@@ -157,7 +156,7 @@ devtools/shared/webconsole/test/test_*.html
 
 # Ignore devtools preferences files
 devtools/client/preferences/**
-devtools/shim/devtools-startup-prefs.js
+devtools/startup/devtools-startup-prefs.js
 
 # Ignore devtools third-party libs
 devtools/shared/jsbeautify/*

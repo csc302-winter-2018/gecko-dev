@@ -135,6 +135,13 @@ impl<'ld> TDocument for GeckoDocument<'ld> {
 #[derive(Clone, Copy)]
 pub struct GeckoShadowRoot<'lr>(pub &'lr structs::ShadowRoot);
 
+impl<'lr> PartialEq for GeckoShadowRoot<'lr> {
+    #[inline]
+    fn eq(&self, other: &Self) -> bool {
+        self.0 as *const _ == other.0 as *const _
+    }
+}
+
 impl<'lr> TShadowRoot for GeckoShadowRoot<'lr> {
     type ConcreteNode = GeckoNode<'lr>;
 
@@ -164,6 +171,7 @@ impl<'lr> TShadowRoot for GeckoShadowRoot<'lr> {
         let author_styles =
             AuthorStyles::<GeckoStyleSheet>::from_ffi(author_styles);
 
+        debug_assert!(!author_styles.stylesheets.dirty());
         debug_assert!(
             author_styles.quirks_mode == self.as_node().owner_doc().quirks_mode() ||
             author_styles.stylesheets.is_empty()
@@ -616,7 +624,8 @@ impl<'le> GeckoElement<'le> {
             return None;
         }
 
-        unsafe { bindings::Gecko_GetXBLBinding(self.0).map(GeckoXBLBinding) }
+        let slots = self.extended_slots()?;
+        unsafe { slots.mXBLBinding.mRawPtr.as_ref().map(GeckoXBLBinding) }
     }
 
     #[inline]
@@ -1039,29 +1048,6 @@ impl<'le> TElement for GeckoElement<'le> {
         self.before_or_after_pseudo(/* is_before = */ false)
     }
 
-    /// Ensure this accurately represents the rules that an element may ever
-    /// match, even in the native anonymous content case.
-    fn style_scope(&self) -> Self::ConcreteNode {
-        if self.implemented_pseudo_element().is_some() {
-            return self.closest_non_native_anonymous_ancestor().unwrap().style_scope();
-        }
-
-        if self.is_in_native_anonymous_subtree() {
-            return self.as_node().owner_doc().as_node();
-        }
-
-        if self.xbl_binding().is_some() || self.shadow_root().is_some() {
-            return self.as_node();
-        }
-
-        if let Some(parent) = self.xbl_binding_parent() {
-            return parent.as_node();
-        }
-
-        self.as_node().owner_doc().as_node()
-    }
-
-
     #[inline]
     fn is_html_element(&self) -> bool {
         self.namespace_id() == (structs::root::kNameSpaceID_XHTML as i32)
@@ -1107,8 +1093,16 @@ impl<'le> TElement for GeckoElement<'le> {
         unsafe { slots._base.mContainingShadow.mRawPtr.as_ref().map(GeckoShadowRoot) }
     }
 
-    /// Execute `f` for each anonymous content child element (apart from
-    /// ::before and ::after) whose originating element is `self`.
+    fn has_same_xbl_proto_binding_as(&self, other: Self) -> bool {
+        match (self.xbl_binding(), other.xbl_binding()) {
+            (None, None) => true,
+            (Some(a), Some(b)) => {
+                a.0.mPrototypeBinding == b.0.mPrototypeBinding
+            }
+            _ => false,
+        }
+    }
+
     fn each_anonymous_content_child<F>(&self, mut f: F)
     where
         F: FnMut(Self),
@@ -1829,10 +1823,19 @@ impl<'le> ::selectors::Element for GeckoElement<'le> {
 
     #[inline]
     fn parent_element(&self) -> Option<Self> {
-        // FIXME(emilio): This will need to jump across if the parent node is a
-        // shadow root to get the shadow host.
         let parent_node = self.as_node().parent_node();
         parent_node.and_then(|n| n.as_element())
+    }
+
+    #[inline]
+    fn parent_node_is_shadow_root(&self) -> bool {
+        self.as_node().parent_node().map_or(false, |p| p.is_shadow_root())
+    }
+
+    #[inline]
+    fn containing_shadow_host(&self) -> Option<Self> {
+        let shadow = self.containing_shadow()?;
+        Some(shadow.host())
     }
 
     #[inline]

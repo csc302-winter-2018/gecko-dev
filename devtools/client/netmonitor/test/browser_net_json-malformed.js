@@ -7,7 +7,7 @@
  * Tests if malformed JSON responses are handled correctly.
  */
 
-add_task(async function () {
+add_task(async function() {
   let { L10N } = require("devtools/client/netmonitor/src/utils/l10n");
   let { tab, monitor } = await initNetMonitor(JSON_MALFORMED_URL);
   info("Starting test... ");
@@ -21,11 +21,8 @@ add_task(async function () {
 
   store.dispatch(Actions.batchEnable(false));
 
-  let wait = waitForNetworkEvents(monitor, 1);
-  await ContentTask.spawn(tab.linkedBrowser, {}, async function () {
-    content.wrappedJSObject.performRequests();
-  });
-  await wait;
+  // Execute requests.
+  await performRequests(monitor, tab, 1);
 
   let requestItem = document.querySelector(".request-list-item");
   let requestsListStatus = requestItem.querySelector(".requests-list-status");

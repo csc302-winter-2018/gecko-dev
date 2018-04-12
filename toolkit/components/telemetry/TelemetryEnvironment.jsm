@@ -217,7 +217,6 @@ const DEFAULT_ENVIRONMENT_PREFS = new Map([
   ["dom.ipc.processCount", {what: RECORD_PREF_VALUE}],
   ["dom.max_script_run_time", {what: RECORD_PREF_VALUE}],
   ["experiments.manifest.uri", {what: RECORD_PREF_VALUE}],
-  ["extensions.allow-non-mpc-extensions", {what: RECORD_PREF_VALUE}],
   ["extensions.autoDisableScopes", {what: RECORD_PREF_VALUE}],
   ["extensions.enabledScopes", {what: RECORD_PREF_VALUE}],
   ["extensions.blocklist.enabled", {what: RECORD_PREF_VALUE}],
@@ -246,7 +245,7 @@ const DEFAULT_ENVIRONMENT_PREFS = new Map([
   ["layers.prefer-d3d9", {what: RECORD_PREF_VALUE}],
   ["layers.prefer-opengl", {what: RECORD_PREF_VALUE}],
   ["layout.css.devPixelsPerPx", {what: RECORD_PREF_VALUE}],
-  ["layout.css.servo.enabled", {what: RECORD_PREF_VALUE}],
+  ["marionette.enabled", {what: RECORD_PREF_VALUE}],
   ["network.proxy.autoconfig_url", {what: RECORD_PREF_STATE}],
   ["network.proxy.http", {what: RECORD_PREF_STATE}],
   ["network.proxy.ssl", {what: RECORD_PREF_STATE}],
@@ -693,7 +692,7 @@ EnvironmentAddonBuilder.prototype = {
           updateDay: Utils.millisecondsToDays(updateDate.getTime()),
           isSystem: addon.isSystem,
           isWebExtension: addon.isWebExtension,
-          multiprocessCompatible: Boolean(addon.multiprocessCompatible),
+          multiprocessCompatible: true,
         };
 
         // getActiveAddons() gives limited data during startup and full
@@ -707,7 +706,7 @@ EnvironmentAddonBuilder.prototype = {
             userDisabled: enforceBoolean(addon.userDisabled),
             appDisabled: addon.appDisabled,
             foreignInstall: enforceBoolean(addon.foreignInstall),
-            hasBinaryComponents: addon.hasBinaryComponents,
+            hasBinaryComponents: false,
             installDay: Utils.millisecondsToDays(installDate.getTime()),
             signedState: addon.signedState,
           });
@@ -747,7 +746,7 @@ EnvironmentAddonBuilder.prototype = {
         version: limitStringToLength(theme.version, MAX_ADDON_STRING_LENGTH),
         scope: theme.scope,
         foreignInstall: enforceBoolean(theme.foreignInstall),
-        hasBinaryComponents: theme.hasBinaryComponents,
+        hasBinaryComponents: false,
         installDay: Utils.millisecondsToDays(installDate.getTime()),
         updateDay: Utils.millisecondsToDays(updateDate.getTime()),
       };
@@ -857,21 +856,7 @@ EnvironmentAddonBuilder.prototype = {
    * @return Object containing the active experiment data.
    */
   _getActiveExperiment() {
-    let experimentInfo = {};
-    try {
-      let scope = {};
-      ChromeUtils.import("resource:///modules/experiments/Experiments.jsm", scope);
-      let experiments = scope.Experiments.instance();
-      let activeExperiment = experiments.getActiveExperimentID();
-      if (activeExperiment) {
-        experimentInfo.id = activeExperiment;
-        experimentInfo.branch = experiments.getActiveExperimentBranch();
-      }
-    } catch (e) {
-      // If this is not Firefox, the import will fail.
-    }
-
-    return experimentInfo;
+    return {};
   },
 };
 

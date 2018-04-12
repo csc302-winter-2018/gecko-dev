@@ -62,15 +62,15 @@ function initBackend(aUrl) {
   DebuggerServer.init();
   DebuggerServer.registerAllActors();
 
-  return Task.spawn(function* () {
-    let tab = yield addTab(aUrl);
+  return (async function () {
+    let tab = await addTab(aUrl);
     let target = TargetFactory.forTab(tab);
 
-    yield target.makeRemote();
+    await target.makeRemote();
 
     let front = new WebAudioFront(target.client, target.form);
     return { target, front };
-  });
+  })();
 }
 
 /**
@@ -81,17 +81,17 @@ function initBackend(aUrl) {
 function initWebAudioEditor(aUrl) {
   info("Initializing a web audio editor pane.");
 
-  return Task.spawn(function* () {
-    let tab = yield addTab(aUrl);
+  return (async function () {
+    let tab = await addTab(aUrl);
     let target = TargetFactory.forTab(tab);
 
-    yield target.makeRemote();
+    await target.makeRemote();
 
     Services.prefs.setBoolPref("devtools.webaudioeditor.enabled", true);
-    let toolbox = yield gDevTools.showToolbox(target, "webaudioeditor");
+    let toolbox = await gDevTools.showToolbox(target, "webaudioeditor");
     let panel = toolbox.getCurrentPanel();
     return { target, panel, toolbox };
-  });
+  })();
 }
 
 /**
@@ -151,7 +151,7 @@ function waitForGraphRendered(front, nodeCount, edgeCount, paramEdgeCount) {
   info(`Wait for graph rendered with ${nodeCount} nodes, ${edgeCount} edges`);
 
   return new Promise((resolve, reject) => {
-    front.on(eventName, function onGraphRendered(_, nodes, edges, pEdges) {
+    front.on(eventName, function onGraphRendered(nodes, edges, pEdges) {
       let paramEdgesDone = paramEdgeCount != null ? paramEdgeCount === pEdges : true;
       info(`Got graph rendered with ${nodes} / ${nodeCount} nodes, ` +
            `${edges} / ${edgeCount} edges`);
@@ -207,8 +207,17 @@ function modifyVariableView(win, view, index, prop, value) {
   scope.expand();
 
   return new Promise((resolve, reject) => {
-    win.on(win.EVENTS.UI_SET_PARAM, handleSetting);
-    win.on(win.EVENTS.UI_SET_PARAM_ERROR, handleSetting);
+    const onParamSetSuccess = () => {
+      win.off(win.EVENTS.UI_SET_PARAM_ERROR, onParamSetError);
+      resolve();
+    }
+
+    const onParamSetError = () => {
+      win.off(win.EVENTS.UI_SET_PARAM, onParamSetSuccess);
+      reject();
+    }
+    win.once(win.EVENTS.UI_SET_PARAM, onParamSetSuccess);
+    win.once(win.EVENTS.UI_SET_PARAM_ERROR, onParamSetError);
 
     // Focus and select the variable to begin editing
     win.focus();
@@ -224,15 +233,6 @@ function modifyVariableView(win, view, index, prop, value) {
       }
       EventUtils.sendKey("RETURN", win);
     });
-
-    function handleSetting(eventName) {
-      win.off(win.EVENTS.UI_SET_PARAM, handleSetting);
-      win.off(win.EVENTS.UI_SET_PARAM_ERROR, handleSetting);
-      if (eventName === win.EVENTS.UI_SET_PARAM)
-        resolve();
-      if (eventName === win.EVENTS.UI_SET_PARAM_ERROR)
-        reject();
-    }
   });
 }
 
@@ -325,7 +325,7 @@ function countGraphObjects(win) {
 * Forces cycle collection and GC, used in AudioNode destruction tests.
 */
 function forceNodeCollection() {
-  ContentTask.spawn(gBrowser.selectedBrowser, {}, function*() {
+  ContentTask.spawn(gBrowser.selectedBrowser, {}, async function () {
     // Kill the reference keeping stuff alive.
     content.wrappedJSObject.keepAlive = null;
 

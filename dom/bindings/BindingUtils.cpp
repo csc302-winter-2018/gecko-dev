@@ -3127,9 +3127,20 @@ ConvertExceptionToPromise(JSContext* cx,
 
 /* static */
 void
-CreateGlobalOptions<nsGlobalWindowInner>::TraceGlobal(JSTracer* aTrc, JSObject* aObj)
+CreateGlobalOptionsWithXPConnect::TraceGlobal(JSTracer* aTrc, JSObject* aObj)
 {
   xpc::TraceXPCGlobal(aTrc, aObj);
+}
+
+/* static */
+bool
+CreateGlobalOptionsWithXPConnect::PostCreateGlobal(JSContext* aCx,
+                                                   JS::Handle<JSObject*> aGlobal)
+{
+  // Invoking the XPCWrappedNativeScope constructor automatically hooks it
+  // up to the compartment of aGlobal.
+  (void) new XPCWrappedNativeScope(aCx, aGlobal);
+  return true;
 }
 
 static bool sRegisteredDOMNames = false;
@@ -3165,10 +3176,7 @@ CreateGlobalOptions<nsGlobalWindowInner>::PostCreateGlobal(JSContext* aCx,
     return Throw(aCx, rv);
   }
 
-  // Invoking the XPCWrappedNativeScope constructor automatically hooks it
-  // up to the compartment of aGlobal.
-  (void) new XPCWrappedNativeScope(aCx, aGlobal);
-  return true;
+  return CreateGlobalOptionsWithXPConnect::PostCreateGlobal(aCx, aGlobal);
 }
 
 #ifdef DEBUG
@@ -3804,6 +3812,42 @@ UnprivilegedJunkScopeOrWorkerGlobal()
   return GetCurrentThreadWorkerGlobal();
 }
 } // namespace binding_detail
+
+JS::Handle<JSObject*>
+GetPerInterfaceObjectHandle(JSContext* aCx,
+                            size_t aSlotId,
+                            CreateInterfaceObjectsMethod aCreator,
+                            bool aDefineOnGlobal)
+{
+  /* Make sure our global is sane.  Hopefully we can remove this sometime */
+  JSObject* global = JS::CurrentGlobalOrNull(aCx);
+  if (!(js::GetObjectClass(global)->flags & JSCLASS_DOM_GLOBAL)) {
+    return nullptr;
+  }
+
+  /* Check to see whether the interface objects are already installed */
+  ProtoAndIfaceCache& protoAndIfaceCache = *GetProtoAndIfaceCache(global);
+  if (!protoAndIfaceCache.HasEntryInSlot(aSlotId)) {
+    JS::Rooted<JSObject*> rootedGlobal(aCx, global);
+    aCreator(aCx, rootedGlobal, protoAndIfaceCache, aDefineOnGlobal);
+  }
+
+  /*
+   * The object might _still_ be null, but that's OK.
+   *
+   * Calling fromMarkedLocation() is safe because protoAndIfaceCache is
+   * traced by TraceProtoAndIfaceCache() and its contents are never
+   * changed after they have been set.
+   *
+   * Calling address() avoids the read barrier that does gray unmarking, but
+   * it's not possible for the object to be gray here.
+   */
+
+  const JS::Heap<JSObject*>& entrySlot =
+    protoAndIfaceCache.EntrySlotMustExist(aSlotId);
+  MOZ_ASSERT(JS::ObjectIsNotGray(entrySlot));
+  return JS::Handle<JSObject*>::fromMarkedLocation(entrySlot.address());
+}
 
 } // namespace dom
 } // namespace mozilla

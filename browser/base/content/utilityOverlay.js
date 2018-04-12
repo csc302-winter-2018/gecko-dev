@@ -7,7 +7,9 @@
 ChromeUtils.import("resource://gre/modules/AppConstants.jsm");
 ChromeUtils.import("resource://gre/modules/Services.jsm");
 ChromeUtils.import("resource://gre/modules/XPCOMUtils.jsm");
-ChromeUtils.import("resource://gre/modules/PrivateBrowsingUtils.jsm");
+
+ChromeUtils.defineModuleGetter(this, "PrivateBrowsingUtils",
+                               "resource://gre/modules/PrivateBrowsingUtils.jsm");
 
 ChromeUtils.defineModuleGetter(this, "RecentWindow",
                                "resource:///modules/RecentWindow.jsm");
@@ -446,7 +448,7 @@ function openLinkIn(url, where, params) {
       targetBrowser.createAboutBlankContentViewer(aPrincipal);
     }
 
-    targetBrowser.loadURIWithFlags(url, {
+    targetBrowser.loadURI(url, {
       triggeringPrincipal: aTriggeringPrincipal,
       flags,
       referrerURI: aNoReferrer ? null : aReferrerURI,
@@ -829,6 +831,12 @@ function openTourPage() {
 }
 
 function buildHelpMenu() {
+  document.getElementById("feedbackPage")
+          .disabled = !Services.policies.isAllowed("feedbackCommands");
+
+  document.getElementById("helpSafeMode")
+          .disabled = !Services.policies.isAllowed("safeMode");
+
   // Enable/disable the "Report Web Forgery" menu item.
   if (typeof gSafeBrowsing != "undefined") {
     gSafeBrowsing.setReportPhishingMenu();

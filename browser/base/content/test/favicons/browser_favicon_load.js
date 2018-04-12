@@ -129,8 +129,10 @@ async function doTest(aTestPage, aFaviconURL, aTailingEnabled) {
   // Waiting for favicon loaded.
   await promiseWaitOnFaviconLoaded;
 
+  Services.obs.removeObserver(observer, "http-on-modify-request");
+
   // Close the tab.
-  await BrowserTestUtils.removeTab(tab);
+  BrowserTestUtils.removeTab(tab);
 }
 
 async function setupTailingPreference(aTailingEnabled) {

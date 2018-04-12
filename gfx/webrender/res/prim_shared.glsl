@@ -16,6 +16,9 @@
 #define SUBPX_DIR_HORIZONTAL  1
 #define SUBPX_DIR_VERTICAL    2
 
+#define RASTER_LOCAL            0
+#define RASTER_SCREEN           1
+
 #define EPSILON     0.0001
 
 uniform sampler2DArray sCacheA8;
@@ -86,21 +89,12 @@ uniform HIGHP_SAMPLER_FLOAT sampler2D sRenderTasks;
 in ivec4 aData0;
 in ivec4 aData1;
 
-// Work around Angle bug that forgets to update sampler metadata,
-// by making the use of those samplers uniform across programs.
-// https://github.com/servo/webrender/wiki/Driver-issues#texturesize-in-vertex-shaders
-void markCacheTexturesUsed() {
-    vec2 size = vec2(textureSize(sCacheA8, 0)) + vec2(textureSize(sCacheRGBA8, 0));
-    if (size.x > 1000000.0) {
-        gl_Position = vec4(0.0);
-    }
-}
-
 // get_fetch_uv is a macro to work around a macOS Intel driver parsing bug.
 // TODO: convert back to a function once the driver issues are resolved, if ever.
 // https://github.com/servo/webrender/pull/623
 // https://github.com/servo/servo/issues/13953
-#define get_fetch_uv(i, vpi)  ivec2(vpi * (i % (WR_MAX_VERTEX_TEXTURE_WIDTH/vpi)), i / (WR_MAX_VERTEX_TEXTURE_WIDTH/vpi))
+// Do the division with unsigned ints because that's more efficient with D3D
+#define get_fetch_uv(i, vpi)  ivec2(int(uint(vpi) * (uint(i) % uint(WR_MAX_VERTEX_TEXTURE_WIDTH/vpi))), int(uint(i) / uint(WR_MAX_VERTEX_TEXTURE_WIDTH/vpi)))
 
 
 vec4[8] fetch_from_resource_cache_8(int address) {
@@ -259,7 +253,6 @@ RenderTaskCommonData fetch_render_task_common_data(int index) {
 
 #define PIC_TYPE_IMAGE          1
 #define PIC_TYPE_TEXT_SHADOW    2
-#define PIC_TYPE_BOX_SHADOW     3
 
 /*
  The dynamic picture that this brush exists on. Right now, it
@@ -289,6 +282,7 @@ PictureTask fetch_picture_task(int address) {
 struct ClipArea {
     RenderTaskCommonData common_data;
     vec2 screen_origin;
+    bool local_space;
 };
 
 ClipArea fetch_clip_area(int index) {
@@ -300,11 +294,13 @@ ClipArea fetch_clip_area(int index) {
             0.0
         );
         area.screen_origin = vec2(0.0);
+        area.local_space = false;
     } else {
         RenderTaskData task_data = fetch_render_task_data(index);
 
         area.common_data = task_data.common_data;
         area.screen_origin = task_data.data1.xy;
+        area.local_space = task_data.data1.z == 0.0;
     }
 
     return area;
@@ -375,8 +371,6 @@ PrimitiveInstance fetch_prim_instance() {
     pi.user_data1 = aData1.z;
     pi.user_data2 = aData1.w;
 
-    markCacheTexturesUsed();
-
     return pi;
 }
 
@@ -403,8 +397,6 @@ CompositeInstance fetch_composite_instance() {
     ci.user_data1 = aData1.y;
     ci.user_data2 = aData1.z;
     ci.user_data3 = aData1.w;
-
-    markCacheTexturesUsed();
 
     return ci;
 }
@@ -696,20 +688,19 @@ struct ImageResource {
     RectWithEndpoint uv_rect;
     float layer;
     vec3 user_data;
-    vec4 color;
 };
 
 ImageResource fetch_image_resource(int address) {
     //Note: number of blocks has to match `renderer::BLOCKS_PER_UV_RECT`
-    vec4 data[3] = fetch_from_resource_cache_3(address);
+    vec4 data[2] = fetch_from_resource_cache_2(address);
     RectWithEndpoint uv_rect = RectWithEndpoint(data[0].xy, data[0].zw);
-    return ImageResource(uv_rect, data[1].x, data[1].yzw, data[2]);
+    return ImageResource(uv_rect, data[1].x, data[1].yzw);
 }
 
 ImageResource fetch_image_resource_direct(ivec2 address) {
-    vec4 data[3] = fetch_from_resource_cache_3_direct(address);
+    vec4 data[2] = fetch_from_resource_cache_2_direct(address);
     RectWithEndpoint uv_rect = RectWithEndpoint(data[0].xy, data[0].zw);
-    return ImageResource(uv_rect, data[1].x, data[1].yzw, data[2]);
+    return ImageResource(uv_rect, data[1].x, data[1].yzw);
 }
 
 struct TextRun {
@@ -822,7 +813,7 @@ float do_clip() {
         vec4(vClipMaskUv.xy, vClipMaskUvBounds.zw));
     // check for the dummy bounds, which are given to the opaque objects
     return vClipMaskUvBounds.xy == vClipMaskUvBounds.zw ? 1.0:
-        all(inside) ? texelFetch(sSharedCacheA8, ivec3(vClipMaskUv), 0).r : 0.0;
+        all(inside) ? texelFetch(sCacheA8, ivec3(vClipMaskUv), 0).r : 0.0;
 }
 
 #ifdef WR_FEATURE_DITHERING

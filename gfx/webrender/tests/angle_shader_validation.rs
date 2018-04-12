@@ -33,16 +33,16 @@ const SHADERS: &[Shader] = &[
         features: CLIP_FEATURES,
     },
     Shader {
+        name: "cs_clip_box_shadow",
+        features: CLIP_FEATURES,
+    },
+    Shader {
         name: "cs_clip_border",
         features: CLIP_FEATURES,
     },
     // Cache shaders
     Shader {
         name: "cs_blur",
-        features: CACHE_FEATURES,
-    },
-    Shader {
-        name: "cs_text_run",
         features: CACHE_FEATURES,
     },
     // Prim shaders
@@ -81,10 +81,6 @@ const SHADERS: &[Shader] = &[
     },
     Shader {
         name: "brush_solid",
-        features: &[],
-    },
-    Shader {
-        name: "brush_picture",
         features: &[],
     },
     Shader {

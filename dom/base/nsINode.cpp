@@ -25,9 +25,7 @@
 #include "mozilla/Telemetry.h"
 #include "mozilla/TextEditor.h"
 #include "mozilla/TimeStamp.h"
-#ifdef MOZ_OLD_STYLE
-#include "mozilla/css/StyleRule.h"
-#endif
+#include "mozilla/dom/DocumentType.h"
 #include "mozilla/dom/Element.h"
 #include "mozilla/dom/Event.h"
 #include "mozilla/dom/L10nUtilsBinding.h"
@@ -62,7 +60,6 @@
 #include "nsIControllers.h"
 #include "nsIDocument.h"
 #include "nsIDOMDocument.h"
-#include "nsIDOMDocumentType.h"
 #include "nsIDOMEvent.h"
 #include "nsIDOMEventListener.h"
 #include "nsIDOMNodeList.h"
@@ -87,9 +84,6 @@
 #include "nsPIBoxObject.h"
 #include "nsPIDOMWindow.h"
 #include "nsPresContext.h"
-#ifdef MOZ_OLD_STYLE
-#include "nsRuleProcessorData.h"
-#endif
 #include "nsString.h"
 #include "nsStyleConsts.h"
 #include "nsSVGUtils.h"
@@ -99,14 +93,10 @@
 #include "nsXBLPrototypeBinding.h"
 #include "mozilla/Preferences.h"
 #include "xpcpublic.h"
-#ifdef MOZ_OLD_STYLE
-#include "nsCSSRuleProcessor.h"
-#endif
 #include "nsCSSParser.h"
 #include "HTMLLegendElement.h"
 #include "nsWrapperCacheInlines.h"
 #include "WrapperFactory.h"
-#include "DocumentType.h"
 #include <algorithm>
 #include "nsGlobalWindow.h"
 #include "nsDOMMutationObserver.h"
@@ -166,8 +156,7 @@ nsINode::~nsINode()
 }
 
 void*
-nsINode::GetProperty(uint16_t aCategory, nsAtom *aPropertyName,
-                     nsresult *aStatus) const
+nsINode::GetProperty(nsAtom* aPropertyName, nsresult* aStatus) const
 {
   if (!HasProperties()) { // a fast HasFlag() test
     if (aStatus) {
@@ -175,21 +164,21 @@ nsINode::GetProperty(uint16_t aCategory, nsAtom *aPropertyName,
     }
     return nullptr;
   }
-  return OwnerDoc()->PropertyTable(aCategory)->GetProperty(this, aPropertyName,
-                                                           aStatus);
+  return OwnerDoc()->PropertyTable().GetProperty(this, aPropertyName, aStatus);
 }
 
 nsresult
-nsINode::SetProperty(uint16_t aCategory, nsAtom *aPropertyName, void *aValue,
-                     NSPropertyDtorFunc aDtor, bool aTransfer,
-                     void **aOldValue)
+nsINode::SetProperty(nsAtom* aPropertyName,
+                     void* aValue,
+                     NSPropertyDtorFunc aDtor,
+                     bool aTransfer)
 {
-  nsresult rv = OwnerDoc()->PropertyTable(aCategory)->SetProperty(this,
-                                                                  aPropertyName,
-                                                                  aValue, aDtor,
-                                                                  nullptr,
-                                                                  aTransfer,
-                                                                  aOldValue);
+  nsresult rv = OwnerDoc()->PropertyTable().SetProperty(this,
+                                                        aPropertyName,
+                                                        aValue,
+                                                        aDtor,
+                                                        nullptr,
+                                                        aTransfer);
   if (NS_SUCCEEDED(rv)) {
     SetFlags(NODE_HAS_PROPERTIES);
   }
@@ -198,18 +187,15 @@ nsINode::SetProperty(uint16_t aCategory, nsAtom *aPropertyName, void *aValue,
 }
 
 void
-nsINode::DeleteProperty(uint16_t aCategory, nsAtom *aPropertyName)
+nsINode::DeleteProperty(nsAtom* aPropertyName)
 {
-  OwnerDoc()->PropertyTable(aCategory)->DeleteProperty(this, aPropertyName);
+  OwnerDoc()->PropertyTable().DeleteProperty(this, aPropertyName);
 }
 
 void*
-nsINode::UnsetProperty(uint16_t aCategory, nsAtom *aPropertyName,
-                       nsresult *aStatus)
+nsINode::UnsetProperty(nsAtom* aPropertyName, nsresult* aStatus)
 {
-  return OwnerDoc()->PropertyTable(aCategory)->UnsetProperty(this,
-                                                             aPropertyName,
-                                                             aStatus);
+  return OwnerDoc()->PropertyTable().UnsetProperty(this, aPropertyName, aStatus);
 }
 
 nsINode::nsSlots*
@@ -737,103 +723,6 @@ nsINode::LookupPrefix(const nsAString& aNamespaceURI, nsAString& aPrefix)
   SetDOMStringToNull(aPrefix);
 }
 
-static nsresult
-SetUserDataProperty(uint16_t aCategory, nsINode *aNode, nsAtom *aKey,
-                    nsISupports* aValue, void** aOldValue)
-{
-  nsresult rv = aNode->SetProperty(aCategory, aKey, aValue,
-                                   nsPropertyTable::SupportsDtorFunc, true,
-                                   aOldValue);
-  NS_ENSURE_SUCCESS(rv, rv);
-
-  // Property table owns it now.
-  NS_ADDREF(aValue);
-
-  return NS_OK;
-}
-
-nsresult
-nsINode::SetUserData(const nsAString &aKey, nsIVariant *aData, nsIVariant **aResult)
-{
-  OwnerDoc()->WarnOnceAbout(nsIDocument::eGetSetUserData);
-  *aResult = nullptr;
-
-  RefPtr<nsAtom> key = NS_Atomize(aKey);
-  if (!key) {
-    return NS_ERROR_OUT_OF_MEMORY;
-  }
-
-  nsresult rv;
-  void *data;
-  if (aData) {
-    rv = SetUserDataProperty(DOM_USER_DATA, this, key, aData, &data);
-    NS_ENSURE_SUCCESS(rv, rv);
-  }
-  else {
-    data = UnsetProperty(DOM_USER_DATA, key);
-  }
-
-  // Take over ownership of the old data from the property table.
-  nsCOMPtr<nsIVariant> oldData = dont_AddRef(static_cast<nsIVariant*>(data));
-  oldData.swap(*aResult);
-  return NS_OK;
-}
-
-void
-nsINode::SetUserData(JSContext* aCx, const nsAString& aKey,
-                     JS::Handle<JS::Value> aData,
-                     JS::MutableHandle<JS::Value> aRetval,
-                     ErrorResult& aError)
-{
-  nsCOMPtr<nsIVariant> data;
-  aError = nsContentUtils::XPConnect()->JSValToVariant(aCx, aData, getter_AddRefs(data));
-  if (aError.Failed()) {
-    return;
-  }
-
-  nsCOMPtr<nsIVariant> oldData;
-  aError = SetUserData(aKey, data, getter_AddRefs(oldData));
-  if (aError.Failed()) {
-    return;
-  }
-
-  if (!oldData) {
-    aRetval.setNull();
-    return;
-  }
-
-  JSAutoCompartment ac(aCx, GetWrapper());
-  aError = nsContentUtils::XPConnect()->VariantToJS(aCx, GetWrapper(), oldData,
-                                                    aRetval);
-}
-
-nsIVariant*
-nsINode::GetUserData(const nsAString& aKey)
-{
-  OwnerDoc()->WarnOnceAbout(nsIDocument::eGetSetUserData);
-  RefPtr<nsAtom> key = NS_Atomize(aKey);
-  if (!key) {
-    return nullptr;
-  }
-
-  return static_cast<nsIVariant*>(GetProperty(DOM_USER_DATA, key));
-}
-
-void
-nsINode::GetUserData(JSContext* aCx, const nsAString& aKey,
-                     JS::MutableHandle<JS::Value> aRetval, ErrorResult& aError)
-{
-  nsIVariant* data = GetUserData(aKey);
-  if (!data) {
-    aRetval.setNull();
-    return;
-  }
-
-  JSAutoCompartment ac(aCx, GetWrapper());
-  aError = nsContentUtils::XPConnect()->VariantToJS(aCx, GetWrapper(), data,
-                                                    aRetval);
-}
-
 uint16_t
 nsINode::CompareDocumentPosition(nsINode& aOtherNode) const
 {
@@ -1048,10 +937,8 @@ nsINode::IsEqualNode(nsINode* aOther)
       }
       case DOCUMENT_TYPE_NODE:
       {
-        nsCOMPtr<nsIDOMDocumentType> docType1 = do_QueryInterface(node1);
-        nsCOMPtr<nsIDOMDocumentType> docType2 = do_QueryInterface(node2);
-
-        NS_ASSERTION(docType1 && docType2, "Why don't we have a document type node?");
+        DocumentType* docType1 = static_cast<DocumentType*>(node1);
+        DocumentType* docType2 = static_cast<DocumentType*>(node2);
 
         // Public ID
         docType1->GetPublicId(string1);
@@ -1415,7 +1302,6 @@ nsINode::Traverse(nsINode *tmp, nsCycleCollectionTraversalCallback &cb)
   }
 
   if (tmp->HasProperties()) {
-    nsNodeUtils::TraverseUserData(tmp, cb);
     nsCOMArray<nsISupports>* objects =
       static_cast<nsCOMArray<nsISupports>*>(tmp->GetProperty(nsGkAtoms::keepobjectsalive));
     if (objects) {
@@ -1451,7 +1337,6 @@ nsINode::Unlink(nsINode* tmp)
   }
 
   if (tmp->HasProperties()) {
-    nsNodeUtils::UnlinkUserData(tmp);
     tmp->DeleteProperty(nsGkAtoms::keepobjectsalive);
   }
 }
@@ -2491,22 +2376,6 @@ nsINode::UnbindObject(nsISupports* aObject)
   }
 }
 
-void
-nsINode::GetBoundMutationObservers(nsTArray<RefPtr<nsDOMMutationObserver> >& aResult)
-{
-  nsCOMArray<nsISupports>* objects =
-    static_cast<nsCOMArray<nsISupports>*>(GetProperty(nsGkAtoms::keepobjectsalive));
-  if (objects) {
-    for (int32_t i = 0; i < objects->Count(); ++i) {
-      nsCOMPtr<nsDOMMutationObserver> mo = do_QueryInterface(objects->ObjectAt(i));
-      if (mo) {
-        MOZ_ASSERT(!aResult.Contains(mo));
-        aResult.AppendElement(mo.forget());
-      }
-    }
-  }
-}
-
 already_AddRefed<AccessibleNode>
 nsINode::GetAccessibleNode()
 {
@@ -2648,96 +2517,9 @@ nsINode::ParseServoSelectorList(
   return selectorList;
 }
 
-#ifdef MOZ_OLD_STYLE
-nsCSSSelectorList*
-nsINode::ParseSelectorList(const nsAString& aSelectorString,
-                           ErrorResult& aRv)
-{
-  nsIDocument* doc = OwnerDoc();
-  nsIDocument::SelectorCache& cache =
-    doc->GetSelectorCache(mozilla::StyleBackendType::Gecko);
-  nsIDocument::SelectorCache::SelectorList* list =
-    cache.GetList(aSelectorString);
-  if (list) {
-    if (!*list) {
-      // Invalid selector.
-      aRv.ThrowDOMException(NS_ERROR_DOM_SYNTAX_ERR,
-        NS_LITERAL_CSTRING("'") + NS_ConvertUTF16toUTF8(aSelectorString) +
-        NS_LITERAL_CSTRING("' is not a valid selector")
-      );
-      return nullptr;
-    }
-
-    return list->AsGecko();
-  }
-
-  nsCSSParser parser(doc->CSSLoader());
-
-  nsCSSSelectorList* selectorList = nullptr;
-  aRv = parser.ParseSelectorString(aSelectorString,
-                                   doc->GetDocumentURI(),
-                                   0, // XXXbz get the line number!
-                                   &selectorList);
-  if (aRv.Failed()) {
-    // We hit this for syntax errors, which are quite common, so don't
-    // use NS_ENSURE_SUCCESS.  (For example, jQuery has an extended set
-    // of selectors, but it sees if we can parse them first.)
-    MOZ_ASSERT(aRv.ErrorCodeIs(NS_ERROR_DOM_SYNTAX_ERR),
-               "Unexpected error, so cached version won't return it");
-
-    // Change the error message to match above.
-    aRv.ThrowDOMException(NS_ERROR_DOM_SYNTAX_ERR,
-      NS_LITERAL_CSTRING("'") + NS_ConvertUTF16toUTF8(aSelectorString) +
-      NS_LITERAL_CSTRING("' is not a valid selector")
-    );
-
-    cache.CacheList(aSelectorString, UniquePtr<nsCSSSelectorList>());
-    return nullptr;
-  }
-
-  // Filter out pseudo-element selectors from selectorList
-  nsCSSSelectorList** slot = &selectorList;
-  do {
-    nsCSSSelectorList* cur = *slot;
-    if (cur->mSelectors->IsPseudoElement()) {
-      *slot = cur->mNext;
-      cur->mNext = nullptr;
-      delete cur;
-    } else {
-      slot = &cur->mNext;
-    }
-  } while (*slot);
-
-  if (selectorList) {
-    NS_ASSERTION(selectorList->mSelectors,
-                 "How can we not have any selectors?");
-    cache.CacheList(aSelectorString, UniquePtr<nsCSSSelectorList>(selectorList));
-  } else {
-    // This is the "only pseudo-element selectors" case, which is
-    // not common, so just don't worry about caching it.  That way a
-    // null cached value can always indicate an invalid selector.
-  }
-
-  return selectorList;
-}
-
-static void
-AddScopeElements(TreeMatchContext& aMatchContext,
-                 nsINode* aMatchContextNode)
-{
-  if (aMatchContextNode->IsElement()) {
-    aMatchContext.SetHasSpecifiedScope();
-    aMatchContext.AddScopeElement(aMatchContextNode->AsElement());
-  }
-}
-#endif
 
 namespace {
 struct SelectorMatchInfo {
-#ifdef MOZ_OLD_STYLE
-  nsCSSSelectorList* const mSelectorList;
-  TreeMatchContext& mMatchContext;
-#endif
 };
 } // namespace
 
@@ -2774,11 +2556,6 @@ FindMatchingElementsWithId(const nsAString& aId, nsINode* aRoot,
       // We have an element with the right id and it's a strict descendant
       // of aRoot.  Make sure it really matches the selector.
       if (!aMatchInfo
-#ifdef MOZ_OLD_STYLE
-          || nsCSSRuleProcessor::SelectorListMatches(element,
-                                                     aMatchInfo->mMatchContext,
-                                                     aMatchInfo->mSelectorList)
-#endif
       ) {
         aList.AppendElement(element);
         if (onlyFirstMatch) {
@@ -2789,67 +2566,6 @@ FindMatchingElementsWithId(const nsAString& aId, nsINode* aRoot,
   }
 }
 
-#ifdef MOZ_OLD_STYLE
-// Actually find elements matching aSelectorList (which must not be
-// null) and which are descendants of aRoot and put them in aList.  If
-// onlyFirstMatch, then stop once the first one is found.
-template<bool onlyFirstMatch, class Collector, class T>
-MOZ_ALWAYS_INLINE static void
-FindMatchingElements(nsINode* aRoot, nsCSSSelectorList* aSelectorList, T &aList,
-                     ErrorResult& aRv)
-{
-  nsIDocument* doc = aRoot->OwnerDoc();
-
-  TreeMatchContext matchingContext(false, nsRuleWalker::eRelevantLinkUnvisited,
-                                   doc, TreeMatchContext::eNeverMatchVisited);
-  AddScopeElements(matchingContext, aRoot);
-
-  // Fast-path selectors involving IDs.  We can only do this if aRoot
-  // is in the document and the document is not in quirks mode, since
-  // ID selectors are case-insensitive in quirks mode.  Also, only do
-  // this if aSelectorList only has one selector, because otherwise
-  // ordering the elements correctly is a pain.
-  NS_ASSERTION(aRoot->IsElement() || aRoot->IsNodeOfType(nsINode::eDOCUMENT) ||
-               !aRoot->IsInUncomposedDoc(),
-               "The optimization below to check ContentIsDescendantOf only for "
-               "elements depends on aRoot being either an element or a "
-               "document if it's in the document.");
-  if (aRoot->IsInUncomposedDoc() &&
-      doc->GetCompatibilityMode() != eCompatibility_NavQuirks &&
-      !aSelectorList->mNext &&
-      aSelectorList->mSelectors->mIDList) {
-    nsAtom* id = aSelectorList->mSelectors->mIDList->mAtom;
-    SelectorMatchInfo info = { aSelectorList, matchingContext };
-    FindMatchingElementsWithId<onlyFirstMatch, T>(nsDependentAtomString(id),
-                                                  aRoot, &info, aList);
-    return;
-  }
-
-  Collector results;
-  for (nsIContent* cur = aRoot->GetFirstChild();
-       cur;
-       cur = cur->GetNextNode(aRoot)) {
-    if (cur->IsElement() &&
-        nsCSSRuleProcessor::SelectorListMatches(cur->AsElement(),
-                                                matchingContext,
-                                                aSelectorList)) {
-      if (onlyFirstMatch) {
-        aList.AppendElement(cur->AsElement());
-        return;
-      }
-      results.AppendElement(cur->AsElement());
-    }
-  }
-
-  const uint32_t len = results.Length();
-  if (len) {
-    aList.SetCapacity(len);
-    for (uint32_t i = 0; i < len; ++i) {
-      aList.AppendElement(results.ElementAt(i));
-    }
-  }
-}
-#endif
 
 struct ElementHolder {
   ElementHolder() : mElement(nullptr) {}
@@ -2879,18 +2595,7 @@ nsINode::QuerySelector(const nsAString& aSelector, ErrorResult& aResult)
           Servo_SelectorList_QueryFirst(this, aList, useInvalidation));
     },
     [&](nsCSSSelectorList* aList) -> Element* {
-#ifdef MOZ_OLD_STYLE
-      if (!aList) {
-        // Either we failed (and aResult already has the exception), or this
-        // is a pseudo-element-only selector that matches nothing.
-        return nullptr;
-      }
-      ElementHolder holder;
-      FindMatchingElements<true, ElementHolder>(this, aList, holder, aResult);
-      return holder.mElement;
-#else
       MOZ_CRASH("old style system disabled");
-#endif
     }
   );
 }
@@ -2912,15 +2617,7 @@ nsINode::QuerySelectorAll(const nsAString& aSelector, ErrorResult& aResult)
         this, aList, contentList.get(), useInvalidation);
     },
     [&](nsCSSSelectorList* aList) {
-#ifdef MOZ_OLD_STYLE
-      if (!aList) {
-        return;
-      }
-      FindMatchingElements<false, AutoTArray<Element*, 128>>(
-        this, aList, *contentList, aResult);
-#else
       MOZ_CRASH("old style system disabled");
-#endif
     }
   );
 
@@ -3057,13 +2754,11 @@ nsINode::IsNodeApzAwareInternal() const
   return EventTarget::IsApzAware();
 }
 
-#ifdef MOZ_STYLO
 bool
 nsINode::IsStyledByServo() const
 {
   return OwnerDoc()->IsStyledByServo();
 }
-#endif
 
 DocGroup*
 nsINode::GetDocGroup() const

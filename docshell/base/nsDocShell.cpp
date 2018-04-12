@@ -649,11 +649,10 @@ nsDocShell::GetInterface(const nsIID& aIID, void** aSink)
     *aSink = GetTabChild().take();
     return *aSink ? NS_OK : NS_ERROR_FAILURE;
   } else if (aIID.Equals(NS_GET_IID(nsIContentFrameMessageManager))) {
-    nsCOMPtr<nsITabChild> tabChild =
-      do_GetInterface(static_cast<nsIDocShell*>(this));
+    RefPtr<TabChild> tabChild = TabChild::GetFrom(this);
     nsCOMPtr<nsIContentFrameMessageManager> mm;
     if (tabChild) {
-      tabChild->GetMessageManager(getter_AddRefs(mm));
+      mm = tabChild->GetMessageManager();
     } else {
       if (nsPIDOMWindowOuter* win = GetWindow()) {
         mm = do_QueryInterface(win->GetParentTarget());
@@ -13736,7 +13735,7 @@ nsDocShell::OnLinkClickSync(nsIContent* aContent,
 
   // If this is an anchor element, grab its type property to use as a hint
   nsAutoString typeHint;
-  RefPtr<HTMLAnchorElement> anchor = HTMLAnchorElement::FromContent(aContent);
+  RefPtr<HTMLAnchorElement> anchor = HTMLAnchorElement::FromNode(aContent);
   if (anchor) {
     anchor->GetType(typeHint);
     NS_ConvertUTF16toUTF8 utf8Hint(typeHint);

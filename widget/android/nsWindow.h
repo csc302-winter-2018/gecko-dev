@@ -54,7 +54,7 @@ public:
 
     static void InitNatives();
     void SetScreenId(uint32_t aScreenId) { mScreenId = aScreenId; }
-    void EnableEventDispatcher();
+    void OnGeckoViewReady();
 
 private:
     uint32_t mScreenId;
@@ -344,7 +344,7 @@ private:
     void CreateLayerManager(int aCompositorWidth, int aCompositorHeight);
     void RedrawAll();
 
-    int64_t GetRootLayerId() const;
+    mozilla::layers::LayersId GetRootLayerId() const;
     RefPtr<mozilla::layers::UiCompositorControllerChild> GetUiCompositorControllerChild();
 };
 

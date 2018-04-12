@@ -99,16 +99,10 @@ interface Node : EventTarget {
   boolean isDefaultNamespace(DOMString? namespace);
 
   // Mozilla-specific stuff
-  [Throws, Func="IsChromeOrXBL"]
-  any setUserData(DOMString key, any data);
-  [Throws, Func="IsChromeOrXBL"]
-  any getUserData(DOMString key);
   [ChromeOnly]
   readonly attribute Principal nodePrincipal;
   [ChromeOnly]
   readonly attribute URI? baseURIObject;
-  [ChromeOnly]
-  sequence<MutationObserver> getBoundMutationObservers();
   [ChromeOnly]
   DOMString generateXPath();
 

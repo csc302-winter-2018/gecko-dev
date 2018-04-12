@@ -89,7 +89,16 @@ var gBrowser = {
   },
 };
 
-async function loadPanel(extensionId, extensionUrl, browserStyle) {
+function loadPanel(extensionId, extensionUrl, browserStyle) {
+  let browserEl = document.getElementById("webext-panels-browser");
+  if (browserEl) {
+    if (browserEl.currentURI.spec === extensionUrl) {
+      return;
+    }
+    // Forces runtime disconnect.  Remove the stack (parent).
+    browserEl.parentNode.remove();
+  }
+
   let policy = WebExtensionPolicy.getByID(extensionId);
   let sidebar = {
     uri: extensionUrl,
@@ -99,6 +108,6 @@ async function loadPanel(extensionId, extensionUrl, browserStyle) {
   getBrowser(sidebar).then(browser => {
     let uri = Services.io.newURI(policy.getURL());
     let triggeringPrincipal = Services.scriptSecurityManager.createCodebasePrincipal(uri, {});
-    browser.loadURIWithFlags(extensionUrl, {triggeringPrincipal});
+    browser.loadURI(extensionUrl, {triggeringPrincipal});
   });
 }

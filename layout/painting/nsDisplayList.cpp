@@ -78,13 +78,9 @@
 #include "LayersLogging.h"
 #include "FrameLayerBuilder.h"
 #include "mozilla/EventStateManager.h"
-#ifdef MOZ_OLD_STYLE
-#include "mozilla/GeckoRestyleManager.h"
-#endif
 #include "nsCaret.h"
 #include "nsISelection.h"
 #include "nsDOMTokenList.h"
-#include "mozilla/RuleNodeCacheConditions.h"
 #include "nsCSSProps.h"
 #include "nsSVGMaskFrame.h"
 #include "nsTableCellFrame.h"
@@ -169,7 +165,7 @@ MakeCSSAngle(const nsCSSValue& aValue)
 }
 
 static void AddTransformFunctions(const nsCSSValueList* aList,
-                                  nsStyleContext* aContext,
+                                  mozilla::ComputedStyle* aStyle,
                                   nsPresContext* aPresContext,
                                   TransformReferenceBox& aRefBox,
                                   InfallibleTArray<TransformFunction>& aFunctions)
@@ -178,19 +174,11 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
     return;
   }
 
-  GeckoStyleContext* contextIfGecko =
-#ifdef MOZ_OLD_STYLE
-    aContext ? aContext->GetAsGecko() : nullptr;
-#else
-    nullptr;
-#endif
-
   for (const nsCSSValueList* curr = aList; curr; curr = curr->mNext) {
     const nsCSSValue& currElem = curr->mValue;
     NS_ASSERTION(currElem.GetUnit() == eCSSUnit_Function,
                  "Stream should consist solely of functions!");
     nsCSSValue::Array* array = currElem.GetArrayValue();
-    RuleNodeCacheConditions conditions;
     switch (nsStyleTransformMatrix::TransformFunctionOf(array)) {
       case eCSSKeyword_rotatex:
       {
@@ -262,7 +250,7 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
       case eCSSKeyword_translatex:
       {
         double x = nsStyleTransformMatrix::ProcessTranslatePart(
-          array->Item(1), contextIfGecko, aPresContext, conditions,
+          array->Item(1),
           &aRefBox, &TransformReferenceBox::Width);
         aFunctions.AppendElement(Translation(x, 0, 0));
         break;
@@ -270,7 +258,7 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
       case eCSSKeyword_translatey:
       {
         double y = nsStyleTransformMatrix::ProcessTranslatePart(
-          array->Item(1), contextIfGecko, aPresContext, conditions,
+          array->Item(1),
           &aRefBox, &TransformReferenceBox::Height);
         aFunctions.AppendElement(Translation(0, y, 0));
         break;
@@ -278,7 +266,7 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
       case eCSSKeyword_translatez:
       {
         double z = nsStyleTransformMatrix::ProcessTranslatePart(
-          array->Item(1), contextIfGecko, aPresContext, conditions,
+          array->Item(1),
           nullptr);
         aFunctions.AppendElement(Translation(0, 0, z));
         break;
@@ -286,13 +274,13 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
       case eCSSKeyword_translate:
       {
         double x = nsStyleTransformMatrix::ProcessTranslatePart(
-          array->Item(1), contextIfGecko, aPresContext, conditions,
+          array->Item(1),
           &aRefBox, &TransformReferenceBox::Width);
         // translate(x) is shorthand for translate(x, 0)
         double y = 0;
         if (array->Count() == 3) {
            y = nsStyleTransformMatrix::ProcessTranslatePart(
-            array->Item(2), contextIfGecko, aPresContext, conditions,
+            array->Item(2),
             &aRefBox, &TransformReferenceBox::Height);
         }
         aFunctions.AppendElement(Translation(x, y, 0));
@@ -301,13 +289,13 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
       case eCSSKeyword_translate3d:
       {
         double x = nsStyleTransformMatrix::ProcessTranslatePart(
-          array->Item(1), contextIfGecko, aPresContext, conditions,
+          array->Item(1),
           &aRefBox, &TransformReferenceBox::Width);
         double y = nsStyleTransformMatrix::ProcessTranslatePart(
-          array->Item(2), contextIfGecko, aPresContext, conditions,
+          array->Item(2),
           &aRefBox, &TransformReferenceBox::Height);
         double z = nsStyleTransformMatrix::ProcessTranslatePart(
-          array->Item(3), contextIfGecko, aPresContext, conditions,
+          array->Item(3),
           nullptr);
 
         aFunctions.AppendElement(Translation(x, y, z));
@@ -351,11 +339,9 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
         matrix._32 = 0;
         matrix._33 = 1;
         matrix._34 = 0;
-        matrix._41 = ProcessTranslatePart(array->Item(5), contextIfGecko,
-                                          aPresContext, conditions,
+        matrix._41 = ProcessTranslatePart(array->Item(5),
                                           &aRefBox, &TransformReferenceBox::Width);
-        matrix._42 = ProcessTranslatePart(array->Item(6), contextIfGecko,
-                                          aPresContext, conditions,
+        matrix._42 = ProcessTranslatePart(array->Item(6),
                                           &aRefBox, &TransformReferenceBox::Height);
         matrix._43 = 0;
         matrix._44 = 1;
@@ -377,14 +363,11 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
         matrix._32 = array->Item(10).GetFloatValue();
         matrix._33 = array->Item(11).GetFloatValue();
         matrix._34 = array->Item(12).GetFloatValue();
-        matrix._41 = ProcessTranslatePart(array->Item(13), contextIfGecko,
-                                          aPresContext, conditions,
+        matrix._41 = ProcessTranslatePart(array->Item(13),
                                           &aRefBox, &TransformReferenceBox::Width);
-        matrix._42 = ProcessTranslatePart(array->Item(14), contextIfGecko,
-                                          aPresContext, conditions,
+        matrix._42 = ProcessTranslatePart(array->Item(14),
                                           &aRefBox, &TransformReferenceBox::Height);
-        matrix._43 = ProcessTranslatePart(array->Item(15), contextIfGecko,
-                                          aPresContext, conditions,
+        matrix._43 = ProcessTranslatePart(array->Item(15),
                                           &aRefBox, nullptr);
         matrix._44 = array->Item(16).GetFloatValue();
         aFunctions.AppendElement(TransformMatrix(matrix));
@@ -395,9 +378,6 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
         bool dummy;
         Matrix4x4 matrix;
         nsStyleTransformMatrix::ProcessInterpolateMatrix(matrix, array,
-                                                         contextIfGecko,
-                                                         aPresContext,
-                                                         conditions,
                                                          aRefBox,
                                                          &dummy);
         aFunctions.AppendElement(TransformMatrix(matrix));
@@ -408,9 +388,6 @@ static void AddTransformFunctions(const nsCSSValueList* aList,
         bool dummy;
         Matrix4x4 matrix;
         nsStyleTransformMatrix::ProcessAccumulateMatrix(matrix, array,
-                                                        contextIfGecko,
-                                                        aPresContext,
-                                                        conditions,
                                                         aRefBox,
                                                         &dummy);
         aFunctions.AppendElement(TransformMatrix(matrix));
@@ -435,7 +412,7 @@ AddTransformFunctions(const nsCSSValueSharedList* aList,
 {
   MOZ_ASSERT(aList->mHead);
   AddTransformFunctions(aList->mHead,
-                        aFrame->StyleContext(),
+                        aFrame->Style(),
                         aFrame->PresContext(),
                         aRefBox,
                         aAnimatable.get_ArrayOfTransformFunction());
@@ -487,13 +464,7 @@ SetAnimatable(nsCSSPropertyID aProperty,
         Servo_AnimationValue_GetTransform(aAnimationValue.mServo, &list);
         AddTransformFunctions(list, aFrame, aRefBox, aAnimatable);
       } else {
-#ifdef MOZ_OLD_STYLE
-        nsCSSValueSharedList* list =
-          aAnimationValue.mGecko.GetCSSValueSharedListValue();
-        AddTransformFunctions(list, aFrame, aRefBox, aAnimatable);
-#else
         MOZ_CRASH("old style system disabled");
-#endif
       }
       break;
     }
@@ -3095,7 +3066,6 @@ nsDisplayItem::nsDisplayItem(nsDisplayListBuilder* aBuilder, nsIFrame* aFrame,
   , mForceNotVisible(aBuilder->IsBuildingInvisibleItems())
   , mDisableSubpixelAA(false)
   , mReusedItem(false)
-  , mMergedItem(false)
   , mBackfaceHidden(mFrame->In3DContextAndBackfaceIsHidden())
 #ifdef MOZ_DUMP_PAINTING
   , mPainted(false)
@@ -3257,12 +3227,9 @@ nsDisplayItem::ShouldUseAdvancedLayer(LayerManager* aManager, PrefFunc aFunc) co
 bool
 nsDisplayItem::CanUseAdvancedLayer(LayerManager* aManager) const
 {
-  if (!gfxPrefs::LayersAdvancedBasicLayerEnabled() &&
-      aManager && aManager->GetBackendType() != layers::LayersBackend::LAYERS_WR) {
-    return false;
-  }
-
-  return true;
+  return gfxPrefs::LayersAdvancedBasicLayerEnabled() ||
+    !aManager ||
+    aManager->GetBackendType() == layers::LayersBackend::LAYERS_WR;
 }
 
 static const DisplayItemClipChain*
@@ -3321,29 +3288,6 @@ nsDisplayItem::GetClippedBounds(nsDisplayListBuilder* aBuilder) const
   return GetClip().ApplyNonRoundedIntersection(r);
 }
 
-already_AddRefed<Layer>
-nsDisplayItem::BuildDisplayItemLayer(nsDisplayListBuilder* aBuilder,
-                                     LayerManager* aManager,
-                                     const ContainerLayerParameters& aContainerParameters)
-{
-  RefPtr<Layer> oldLayer = aManager->GetLayerBuilder()->GetLeafLayerFor(aBuilder, this);
-  RefPtr<DisplayItemLayer> layer = oldLayer ? oldLayer->AsDisplayItemLayer() : nullptr;
-
-  if (!layer) {
-    layer = aManager->CreateDisplayItemLayer();
-
-    if (!layer) {
-      return nullptr;
-    }
-  }
-
-  aManager->TrackDisplayItemLayer(layer);
-  layer->SetDisplayItem(this, aBuilder);
-  layer->SetBaseTransform(gfx::Matrix4x4::Translation(aContainerParameters.mOffset.x,
-                                                      aContainerParameters.mOffset.y, 0));
-  return layer.forget();
-}
-
 nsRect
 nsDisplaySolidColor::GetBounds(nsDisplayListBuilder* aBuilder,
                                bool* aSnap) const
@@ -3357,7 +3301,7 @@ nsDisplaySolidColor::GetLayerState(nsDisplayListBuilder* aBuilder,
                                    LayerManager* aManager,
                                    const ContainerLayerParameters& aParameters)
 {
-  if (ForceActiveLayers() || ShouldUseAdvancedLayer(aManager, gfxPrefs::LayersAllowSolidColorLayers)) {
+  if (ForceActiveLayers()) {
     return LAYER_ACTIVE;
   }
   return LAYER_NONE;
@@ -3585,7 +3529,7 @@ nsDisplayBackgroundImage::~nsDisplayBackgroundImage()
   }
 }
 
-static nsIFrame* GetBackgroundStyleContextFrame(nsIFrame* aFrame)
+static nsIFrame* GetBackgroundComputedStyleFrame(nsIFrame* aFrame)
 {
   nsIFrame* f;
   if (!nsCSSRendering::FindBackgroundFrame(aFrame, &f)) {
@@ -3670,11 +3614,11 @@ nsDisplayBackgroundImage::AppendBackgroundItemsToTop(nsDisplayListBuilder* aBuil
                                                      const nsRect& aBackgroundRect,
                                                      nsDisplayList* aList,
                                                      bool aAllowWillPaintBorderOptimization,
-                                                     nsStyleContext* aStyleContext,
+                                                     ComputedStyle* aComputedStyle,
                                                      const nsRect& aBackgroundOriginRect,
                                                      nsIFrame* aSecondaryReferenceFrame)
 {
-  nsStyleContext* bgSC = aStyleContext;
+  ComputedStyle* bgSC = aComputedStyle;
   const nsStyleBackground* bg = nullptr;
   nsRect bgRect = aBackgroundRect + aBuilder->ToReferenceFrame(aFrame);
   nsRect bgOriginRect = bgRect;
@@ -3686,9 +3630,9 @@ nsDisplayBackgroundImage::AppendBackgroundItemsToTop(nsDisplayListBuilder* aBuil
   nsIFrame* dependentFrame = nullptr;
   if (!isThemed) {
     if (!bgSC) {
-      dependentFrame = GetBackgroundStyleContextFrame(aFrame);
+      dependentFrame = GetBackgroundComputedStyleFrame(aFrame);
       if (dependentFrame) {
-        bgSC = dependentFrame->StyleContext();
+        bgSC = dependentFrame->Style();
         if (dependentFrame == aFrame) {
           dependentFrame = nullptr;
         }
@@ -4065,11 +4009,6 @@ nsDisplayBackgroundImage::GetLayerState(nsDisplayListBuilder* aBuilder,
   mImageFlags = aBuilder->GetBackgroundPaintFlags();
   CheckForBorderItem(this, mImageFlags);
 
-  if (ShouldUseAdvancedLayer(aManager, gfxPrefs::LayersAllowBackgroundImage) &&
-      CanBuildWebRenderDisplayItems(aManager)) {
-    return LAYER_ACTIVE;
-  }
-
   ImageLayerization shouldLayerize = ShouldCreateOwnLayer(aBuilder, aManager);
   if (shouldLayerize == NO_LAYER_NEEDED) {
     // We can skip the call to CanOptimizeToImageLayer if we don't want a
@@ -4117,10 +4056,6 @@ nsDisplayBackgroundImage::BuildLayer(nsDisplayListBuilder* aBuilder,
                                      LayerManager* aManager,
                                      const ContainerLayerParameters& aParameters)
 {
-  if (ShouldUseAdvancedLayer(aManager, gfxPrefs::LayersAllowBackgroundImage)) {
-    return BuildDisplayItemLayer(aBuilder, aManager, aParameters);
-  }
-
   RefPtr<ImageLayer> layer = static_cast<ImageLayer*>
     (aManager->GetLayerBuilder()->GetLeafLayerFor(aBuilder, this));
   if (!layer) {
@@ -4135,14 +4070,19 @@ nsDisplayBackgroundImage::BuildLayer(nsDisplayListBuilder* aBuilder,
 }
 
 bool
-nsDisplayBackgroundImage::CanBuildWebRenderDisplayItems(LayerManager* aManager)
+nsDisplayBackgroundImage::CanBuildWebRenderDisplayItems(LayerManager* aManager, nsDisplayListBuilder* aDisplayListBuilder)
 {
+  if (aDisplayListBuilder) {
+    mImageFlags = aDisplayListBuilder->GetBackgroundPaintFlags();
+  }
+
   return mBackgroundStyle->mImage.mLayers[mLayer].mClip != StyleGeometryBox::Text &&
          nsCSSRendering::CanBuildWebRenderDisplayItemsForStyleImageLayer(aManager,
                                                                          *StyleFrame()->PresContext(),
                                                                          StyleFrame(),
                                                                          mBackgroundStyle,
-                                                                         mLayer);
+                                                                         mLayer,
+                                                                         mImageFlags);
 }
 
 bool
@@ -4153,13 +4093,10 @@ nsDisplayBackgroundImage::CreateWebRenderCommands(mozilla::wr::DisplayListBuilde
                                                   nsDisplayListBuilder* aDisplayListBuilder)
 {
   ContainerLayerParameters parameter;
-  if (GetLayerState(aDisplayListBuilder, aManager, parameter) != LAYER_ACTIVE) {
+  if (!CanBuildWebRenderDisplayItems(aManager, aDisplayListBuilder)) {
     return false;
   }
 
-  if (aDisplayListBuilder) {
-    mImageFlags = aDisplayListBuilder->GetBackgroundPaintFlags();
-  }
   CheckForBorderItem(this, mImageFlags);
   nsCSSRendering::PaintBGParams params =
     nsCSSRendering::PaintBGParams::ForSingleLayer(*StyleFrame()->PresContext(),
@@ -4753,8 +4690,7 @@ nsDisplayBackgroundColor::GetLayerState(nsDisplayListBuilder* aBuilder,
                                         const ContainerLayerParameters& aParameters)
 {
   StyleGeometryBox clip = mBackgroundStyle->mImage.mLayers[0].mClip;
-  if ((ForceActiveLayers() || ShouldUseAdvancedLayer(aManager, gfxPrefs::LayersAllowBackgroundColorLayers)) &&
-      clip != StyleGeometryBox::Text) {
+  if (ForceActiveLayers() && clip != StyleGeometryBox::Text) {
     return LAYER_ACTIVE;
   }
   return LAYER_NONE;
@@ -4975,50 +4911,7 @@ nsDisplayOutline::Paint(nsDisplayListBuilder* aBuilder,
   nsCSSRendering::PaintOutline(mFrame->PresContext(), *aCtx, mFrame,
                                mVisibleRect,
                                nsRect(offset, mFrame->GetSize()),
-                               mFrame->StyleContext());
-}
-
-LayerState
-nsDisplayOutline::GetLayerState(nsDisplayListBuilder* aBuilder,
-                                LayerManager* aManager,
-                                const ContainerLayerParameters& aParameters)
-{
-  if (!ShouldUseAdvancedLayer(aManager, gfxPrefs::LayersAllowOutlineLayers)) {
-    return LAYER_NONE;
-  }
-
-  uint8_t outlineStyle = mFrame->StyleContext()->StyleOutline()->mOutlineStyle;
-  if (outlineStyle == NS_STYLE_BORDER_STYLE_AUTO && nsLayoutUtils::IsOutlineStyleAutoEnabled()) {
-      nsITheme* theme = mFrame->PresContext()->GetTheme();
-      if (theme && theme->ThemeSupportsWidget(mFrame->PresContext(), mFrame,
-                                              NS_THEME_FOCUS_OUTLINE)) {
-        return LAYER_NONE;
-      }
-  }
-
-  nsPoint offset = ToReferenceFrame();
-  Maybe<nsCSSBorderRenderer> br =
-    nsCSSRendering::CreateBorderRendererForOutline(mFrame->PresContext(),
-                                                   nullptr, mFrame,
-                                                   mVisibleRect,
-                                                   nsRect(offset, mFrame->GetSize()),
-                                                   mFrame->StyleContext());
-
-  if (!br) {
-    return LAYER_NONE;
-  }
-
-  mBorderRenderer = br;
-
-  return LAYER_ACTIVE;
-}
-
-already_AddRefed<Layer>
-nsDisplayOutline::BuildLayer(nsDisplayListBuilder* aBuilder,
-                             LayerManager* aManager,
-                             const ContainerLayerParameters& aContainerParameters)
-{
-  return BuildDisplayItemLayer(aBuilder, aManager, aContainerParameters);
+                               mFrame->Style());
 }
 
 bool
@@ -5029,11 +4922,30 @@ nsDisplayOutline::CreateWebRenderCommands(mozilla::wr::DisplayListBuilder& aBuil
                                           nsDisplayListBuilder* aDisplayListBuilder)
 {
   ContainerLayerParameters parameter;
-  if (GetLayerState(aDisplayListBuilder, aManager, parameter) != LAYER_ACTIVE) {
+
+  uint8_t outlineStyle = mFrame->Style()->StyleOutline()->mOutlineStyle;
+  if (outlineStyle == NS_STYLE_BORDER_STYLE_AUTO && nsLayoutUtils::IsOutlineStyleAutoEnabled()) {
+      nsITheme* theme = mFrame->PresContext()->GetTheme();
+      if (theme && theme->ThemeSupportsWidget(mFrame->PresContext(), mFrame,
+                                              NS_THEME_FOCUS_OUTLINE)) {
+        return false;
+      }
+  }
+
+  nsPoint offset = ToReferenceFrame();
+
+  mozilla::Maybe<nsCSSBorderRenderer> borderRenderer =
+    nsCSSRendering::CreateBorderRendererForOutline(mFrame->PresContext(),
+                                                   nullptr, mFrame,
+                                                   mVisibleRect,
+                                                   nsRect(offset, mFrame->GetSize()),
+                                                   mFrame->Style());
+
+  if (!borderRenderer) {
     return false;
   }
 
-  mBorderRenderer->CreateWebRenderCommands(this, aBuilder, aResources, aSc);
+  borderRenderer->CreateWebRenderCommands(this, aBuilder, aResources, aSc);
   return true;
 }
 
@@ -5450,26 +5362,6 @@ nsDisplayCaret::CreateWebRenderCommands(mozilla::wr::DisplayListBuilder& aBuilde
   return true;
 }
 
-LayerState
-nsDisplayCaret::GetLayerState(nsDisplayListBuilder* aBuilder,
-                              LayerManager* aManager,
-                              const ContainerLayerParameters& aParameters)
-{
-  if (ShouldUseAdvancedLayer(aManager, gfxPrefs::LayersAllowCaretLayers)) {
-    return LAYER_ACTIVE;
-  }
-
-  return LAYER_NONE;
-}
-
-already_AddRefed<Layer>
-nsDisplayCaret::BuildLayer(nsDisplayListBuilder* aBuilder,
-                           LayerManager* aManager,
-                           const ContainerLayerParameters& aContainerParameters)
-{
-  return BuildDisplayItemLayer(aBuilder, aManager, aContainerParameters);
-}
-
 nsDisplayBorder::nsDisplayBorder(nsDisplayListBuilder* aBuilder, nsIFrame* aFrame)
   : nsDisplayItem(aBuilder, aFrame)
   , mBorderIsEmpty(false)
@@ -5544,7 +5436,7 @@ nsDisplayBorder::GetLayerState(nsDisplayListBuilder* aBuilder,
                                          mFrame,
                                          nsRect(),
                                          nsRect(offset, mFrame->GetSize()),
-                                         mFrame->StyleContext(),
+                                         mFrame->Style(),
                                          &mBorderIsEmpty,
                                          mFrame->GetSkipSides());
 
@@ -5600,25 +5492,21 @@ nsDisplayBorder::BuildLayer(nsDisplayListBuilder* aBuilder,
     return nullptr;
   }
 
-  if (ShouldUseAdvancedLayer(aManager, gfxPrefs::LayersAllowBorderLayers)) {
-    return BuildDisplayItemLayer(aBuilder, aManager, aContainerParameters);
-  } else {
-    RefPtr<BorderLayer> layer = static_cast<BorderLayer*>
-      (aManager->GetLayerBuilder()->GetLeafLayerFor(aBuilder, this));
-    if (!layer) {
-      layer = aManager->CreateBorderLayer();
-      if (!layer)
-        return nullptr;
-    }
-    layer->SetRect(mRect);
-    layer->SetCornerRadii(mCorners);
-    layer->SetColors(mColors);
-    layer->SetWidths(mWidths);
-    layer->SetStyles(mBorderStyles);
-    layer->SetBaseTransform(gfx::Matrix4x4::Translation(aContainerParameters.mOffset.x,
-                                                        aContainerParameters.mOffset.y, 0));
-    return layer.forget();
+  RefPtr<BorderLayer> layer = static_cast<BorderLayer*>
+    (aManager->GetLayerBuilder()->GetLeafLayerFor(aBuilder, this));
+  if (!layer) {
+    layer = aManager->CreateBorderLayer();
+    if (!layer)
+      return nullptr;
   }
+  layer->SetRect(mRect);
+  layer->SetCornerRadii(mCorners);
+  layer->SetColors(mColors);
+  layer->SetWidths(mWidths);
+  layer->SetStyles(mBorderStyles);
+  layer->SetBaseTransform(gfx::Matrix4x4::Translation(aContainerParameters.mOffset.x,
+                                                      aContainerParameters.mOffset.y, 0));
+  return layer.forget();
 }
 
 bool
@@ -5774,7 +5662,7 @@ nsDisplayBorder::Paint(nsDisplayListBuilder* aBuilder,
     nsCSSRendering::PaintBorder(mFrame->PresContext(), *aCtx, mFrame,
                                 mVisibleRect,
                                 nsRect(offset, mFrame->GetSize()),
-                                mFrame->StyleContext(),
+                                mFrame->Style(),
                                 flags,
                                 mFrame->GetSkipSides());
 
@@ -5879,14 +5767,6 @@ nsDisplayBoxShadowOuter::ComputeVisibility(nsDisplayListBuilder* aBuilder,
 
   mVisibleRegion.And(*aVisibleRegion, mVisibleRect);
   return true;
-}
-
-already_AddRefed<Layer>
-nsDisplayBoxShadowOuter::BuildLayer(nsDisplayListBuilder* aBuilder,
-                                    LayerManager* aManager,
-                                    const ContainerLayerParameters& aContainerParameters)
-{
-  return BuildDisplayItemLayer(aBuilder, aManager, aContainerParameters);
 }
 
 bool
@@ -6080,14 +5960,6 @@ nsDisplayBoxShadowInner::CanCreateWebRenderCommands(nsDisplayListBuilder* aBuild
   }
 
   return true;
-}
-
-already_AddRefed<Layer>
-nsDisplayBoxShadowInner::BuildLayer(nsDisplayListBuilder* aBuilder,
-                                    LayerManager* aManager,
-                                    const ContainerLayerParameters& aContainerParameters)
-{
-  return BuildDisplayItemLayer(aBuilder, aManager, aContainerParameters);
 }
 
 /* static */ void
@@ -8268,7 +8140,6 @@ nsDisplayTransform::GetResultingTransformMatrixInternal(const FrameTransformProp
   }
 
   /* Get the matrix, then change its basis to factor in the origin. */
-  RuleNodeCacheConditions dummy;
   bool dummyBool;
   Matrix4x4 result;
   // Call IsSVGTransformed() regardless of the value of
@@ -8281,9 +8152,7 @@ nsDisplayTransform::GetResultingTransformMatrixInternal(const FrameTransformProp
   /* Transformed frames always have a transform, or are preserving 3d (and might still have perspective!) */
   if (aProperties.mTransformList) {
     result = nsStyleTransformMatrix::ReadTransforms(aProperties.mTransformList->mHead,
-                                                    frame ? frame->StyleContext() : nullptr,
-                                                    frame ? frame->PresContext() : nullptr,
-                                                    dummy, refBox, aAppUnitsPerPixel,
+                                                    refBox, aAppUnitsPerPixel,
                                                     &dummyBool);
   } else if (hasSVGTransforms) {
     // Correct the translation components for zoom:

@@ -515,9 +515,9 @@ ScriptDecodeTask::parse(JSContext* cx)
 
     XDROffThreadDecoder decoder(cx, alloc, &options, /* sourceObjectOut = */ &sourceObject.get(),
                                 range);
-    decoder.codeScript(&resultScript);
-    MOZ_ASSERT(bool(resultScript) == (decoder.resultCode() == JS::TranscodeResult_Ok));
-    if (decoder.resultCode() == JS::TranscodeResult_Ok) {
+    XDRResult res = decoder.codeScript(&resultScript);
+    MOZ_ASSERT(bool(resultScript) == res.isOk());
+    if (res.isOk()) {
         scripts.infallibleAppend(resultScript);
         if (sourceObject)
             sourceObjects.infallibleAppend(sourceObject);
@@ -548,10 +548,10 @@ MultiScriptsDecodeTask::parse(JSContext* cx)
         Rooted<ScriptSourceObject*> sourceObject(cx);
 
         XDROffThreadDecoder decoder(cx, alloc, &opts, &sourceObject.get(), source.range);
-        decoder.codeScript(&resultScript);
-        MOZ_ASSERT(bool(resultScript) == (decoder.resultCode() == JS::TranscodeResult_Ok));
+        XDRResult res = decoder.codeScript(&resultScript);
+        MOZ_ASSERT(bool(resultScript) == res.isOk());
 
-        if (decoder.resultCode() != JS::TranscodeResult_Ok)
+        if (res.isErr())
             break;
         MOZ_ASSERT(resultScript);
         scripts.infallibleAppend(resultScript);
@@ -1497,7 +1497,7 @@ LeaveParseTaskZone(JSRuntime* rt, ParseTask* task)
 {
     // Mark the zone as no longer in use by a helper thread, and available
     // to be collected by the GC.
-    rt->clearUsedByHelperThread(task->parseGlobal->zone());
+    rt->clearUsedByHelperThread(task->parseGlobal->zoneFromAnyThread());
 }
 
 ParseTask*
@@ -2082,14 +2082,6 @@ js::StartOffThreadPromiseHelperTask(PromiseHelperTask* task)
 void
 GlobalHelperThreadState::trace(JSTracer* trc, gc::AutoTraceSession& session)
 {
-    // There's an assertion that requires the exclusive access lock when tracing
-    // atoms (see AtomIsPinnedInRuntime). Due to mutex ordering requirements we
-    // need to take that lock before the helper thread lock, if we don't have it
-    // already.
-    Maybe<AutoLockForExclusiveAccess> exclusiveLock;
-    if (!session.maybeLock.isSome())
-        exclusiveLock.emplace(trc->runtime());
-
     AutoLockHelperThreadState lock;
     for (auto builder : ionWorklist(lock))
         builder->trace(trc);

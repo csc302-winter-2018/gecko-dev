@@ -23,9 +23,6 @@
 #include "nsQueryObject.h"
 #include "nsIContentInlines.h"
 #include "nsIContentViewer.h"
-#ifdef MOZ_OLD_STYLE
-#include "mozilla/css/Declaration.h"
-#endif
 #include "nsIDocument.h"
 #include "nsIDocumentEncoder.h"
 #include "nsIDOMDocumentFragment.h"
@@ -66,7 +63,6 @@
 #include "nsITextControlFrame.h"
 #include "nsIForm.h"
 #include "nsIFormControl.h"
-#include "nsIDOMHTMLFormElement.h"
 #include "mozilla/dom/HTMLFormElement.h"
 #include "nsFocusManager.h"
 #include "nsAttrValueOrString.h"
@@ -95,6 +91,7 @@
 #include "nsThreadUtils.h"
 #include "nsTextFragment.h"
 #include "mozilla/dom/BindingUtils.h"
+#include "mozilla/dom/MouseEventBinding.h"
 #include "mozilla/dom/TouchEvent.h"
 #include "mozilla/ErrorResult.h"
 #include "nsHTMLDocument.h"
@@ -1613,7 +1610,7 @@ nsGenericHTMLElement::GetContextMenu() const
     //XXXsmaug How should this work in Shadow DOM?
     nsIDocument* doc = GetUncomposedDoc();
     if (doc) {
-      return HTMLMenuElement::FromContentOrNull(doc->GetElementById(value));
+      return HTMLMenuElement::FromNodeOrNull(doc->GetElementById(value));
     }
   }
   return nullptr;
@@ -1629,7 +1626,7 @@ nsGenericHTMLElement::IsLabelable() const
 nsGenericHTMLElement::MatchLabelsElement(Element* aElement, int32_t aNamespaceID,
                                          nsAtom* aAtom, void* aData)
 {
-  HTMLLabelElement* element = HTMLLabelElement::FromContent(aElement);
+  HTMLLabelElement* element = HTMLLabelElement::FromNode(aElement);
   return element && element->GetControl() == aData;
 }
 
@@ -1713,13 +1710,13 @@ nsGenericHTMLFormElement::SaveSubtreeState()
 }
 
 void
-nsGenericHTMLFormElement::SetForm(nsIDOMHTMLFormElement* aForm)
+nsGenericHTMLFormElement::SetForm(HTMLFormElement* aForm)
 {
   NS_PRECONDITION(aForm, "Don't pass null here");
   NS_ASSERTION(!mForm,
                "We don't support switching from one non-null form to another.");
 
-  SetForm(static_cast<HTMLFormElement*>(aForm), false);
+  SetForm(aForm, false);
 }
 
 void nsGenericHTMLFormElement::SetForm(HTMLFormElement* aForm, bool aBindToTree)
@@ -1774,14 +1771,6 @@ HTMLFieldSetElement*
 nsGenericHTMLFormElement::GetFieldSet()
 {
   return mFieldSet;
-}
-
-nsresult
-nsGenericHTMLFormElement::GetForm(nsIDOMHTMLFormElement** aForm)
-{
-  NS_ENSURE_ARG_POINTER(aForm);
-  NS_IF_ADDREF(*aForm = mForm);
-  return NS_OK;
 }
 
 nsIContent::IMEState
@@ -2349,7 +2338,7 @@ nsGenericHTMLFormElement::UpdateFieldSet(bool aNotify)
   for (parent = GetParent(); parent && parent != bindingParent;
        prev = parent, parent = parent->GetParent()) {
     HTMLFieldSetElement* fieldset =
-      HTMLFieldSetElement::FromContent(parent);
+      HTMLFieldSetElement::FromNode(parent);
     if (fieldset &&
         (!prev || fieldset->GetFirstLegend() != prev)) {
       if (mFieldSet == fieldset) {
@@ -2417,7 +2406,7 @@ nsGenericHTMLFormElement::UpdateRequiredState(bool aIsRequired, bool aNotify)
              "This should be called only on types that @required applies");
 
 #ifdef DEBUG
-  HTMLInputElement* input = HTMLInputElement::FromContent(this);
+  HTMLInputElement* input = HTMLInputElement::FromNode(this);
   if (input) {
     MOZ_ASSERT(input->DoesRequiredApply(),
                "This should be called only on input types that @required applies");
@@ -2506,7 +2495,7 @@ nsGenericHTMLElement::Click(CallerType aCallerType)
   WidgetMouseEvent event(aCallerType == CallerType::System,
                          eMouseClick, nullptr, WidgetMouseEvent::eReal);
   event.mFlags.mIsPositionless = true;
-  event.inputSource = nsIDOMMouseEvent::MOZ_SOURCE_UNKNOWN;
+  event.inputSource = MouseEventBinding::MOZ_SOURCE_UNKNOWN;
 
   EventDispatcher::Dispatch(static_cast<nsIContent*>(this), context, &event);
 
@@ -2629,7 +2618,7 @@ nsGenericHTMLElement::DispatchSimulatedClick(nsGenericHTMLElement* aElement,
 {
   WidgetMouseEvent event(aIsTrusted, eMouseClick, nullptr,
                          WidgetMouseEvent::eReal);
-  event.inputSource = nsIDOMMouseEvent::MOZ_SOURCE_KEYBOARD;
+  event.inputSource = MouseEventBinding::MOZ_SOURCE_KEYBOARD;
   event.mFlags.mIsPositionless = true;
   return EventDispatcher::Dispatch(ToSupports(aElement), aPresContext, &event);
 }
@@ -2648,7 +2637,7 @@ void
 nsGenericHTMLElement::SyncEditorsOnSubtree(nsIContent* content)
 {
   /* Sync this node */
-  nsGenericHTMLElement* element = FromContent(content);
+  nsGenericHTMLElement* element = FromNode(content);
   if (element) {
     RefPtr<TextEditor> textEditor = element->GetAssociatedEditor();
     if (textEditor) {
@@ -2974,39 +2963,7 @@ IsOrHasAncestorWithDisplayNone(Element* aElement, nsIPresShell* aPresShell)
     return !aElement->HasServoData() || Servo_Element_IsDisplayNone(aElement);
   }
 
-#ifdef MOZ_OLD_STYLE
-  AutoTArray<Element*, 10> elementsToCheck;
-  // Style and layout work on the flattened tree, so this is what we need to
-  // check in order to figure out whether we're in a display: none subtree.
-  for (Element* e = aElement; e; e = e->GetFlattenedTreeParentElement()) {
-    if (e->GetPrimaryFrame()) {
-      // e definitely isn't display:none and doesn't have a display:none
-      // ancestor.
-      break;
-    }
-    elementsToCheck.AppendElement(e);
-  }
-
-  if (elementsToCheck.IsEmpty()) {
-    return false;
-  }
-
-  nsStyleSet* styleSet = aPresShell->StyleSet()->AsGecko();
-  RefPtr<GeckoStyleContext> sc;
-  for (auto* element : Reversed(elementsToCheck)) {
-    if (sc) {
-      sc = styleSet->ResolveStyleFor(element, sc, LazyComputeBehavior::Assert);
-    } else {
-      sc = nsComputedDOMStyle::GetStyleContextNoFlush(element, nullptr)
-        .downcast<GeckoStyleContext>();
-    }
-    if (sc->StyleDisplay()->mDisplay == StyleDisplay::None) {
-      return true;
-    }
-  }
-#else
   MOZ_CRASH("Old style system disabled");
-#endif
 
   return false;
 }

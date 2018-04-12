@@ -51,7 +51,6 @@
 #endif
 
 #include "jsapi.h"
-#include "jsarray.h"
 #include "jsfriendapi.h"
 #include "jstypes.h"
 #include "jsutil.h"
@@ -61,6 +60,7 @@
 #endif
 #include "shellmoduleloader.out.h"
 
+#include "builtin/Array.h"
 #include "builtin/ModuleObject.h"
 #include "builtin/RegExp.h"
 #include "builtin/TestingFunctions.h"
@@ -90,6 +90,8 @@
 #include "threading/ExclusiveData.h"
 #include "threading/LockGuard.h"
 #include "threading/Thread.h"
+#include "util/StringBuffer.h"
+#include "util/Text.h"
 #include "util/Windows.h"
 #include "vm/ArgumentsObject.h"
 #include "vm/Compression.h"
@@ -105,7 +107,6 @@
 #include "vm/Printer.h"
 #include "vm/Shape.h"
 #include "vm/SharedArrayObject.h"
-#include "vm/StringBuffer.h"
 #include "vm/Time.h"
 #include "vm/TypedArrayObject.h"
 #include "vm/WrapperObject.h"
@@ -585,8 +586,8 @@ ShellPrincipals ShellPrincipals::fullyTrusted(-1, 1);
 
 #ifdef EDITLINE
 extern "C" {
-extern JS_EXPORT_API(char*) readline(const char* prompt);
-extern JS_EXPORT_API(void)   add_history(char* line);
+extern MOZ_EXPORT char* readline(const char* prompt);
+extern MOZ_EXPORT void add_history(char* line);
 } // extern "C"
 #endif
 
@@ -7456,6 +7457,14 @@ TestAssertRecoveredOnBailout,
     JS_FS_HELP_END
 };
 
+static const JSFunctionSpecWithHelp performance_functions[] = {
+    JS_FN_HELP("now", Now, 0, 0,
+"now()",
+"  Return the current time with sub-ms precision.\n"
+"  This function is an alias of the dateNow() function."),
+    JS_FS_HELP_END
+};
+
 static const JSFunctionSpecWithHelp console_functions[] = {
     JS_FN_HELP("log", Print, 0, 0,
 "log([exp ...])",
@@ -8384,6 +8393,8 @@ NewGlobalObject(JSContext* cx, JS::CompartmentOptions& options,
         RootedObject performanceObj(cx, JS_NewObject(cx, nullptr));
         if (!performanceObj)
             return nullptr;
+        if (!JS_DefineFunctionsWithHelp(cx, performanceObj, performance_functions))
+            return nullptr;
         RootedObject mozMemoryObj(cx, JS_NewObject(cx, nullptr));
         if (!mozMemoryObj)
             return nullptr;
@@ -8598,13 +8609,17 @@ SetContextOptions(JSContext* cx, const OptionParser& op)
         if (strcmp(str, "on") == 0) {
             jit::JitOptions.spectreIndexMasking = true;
             jit::JitOptions.spectreObjectMitigationsBarriers = true;
+            jit::JitOptions.spectreObjectMitigationsMisc = true;
             jit::JitOptions.spectreStringMitigations = true;
             jit::JitOptions.spectreValueMasking = true;
+            jit::JitOptions.spectreJitToCxxCalls = true;
         } else if (strcmp(str, "off") == 0) {
             jit::JitOptions.spectreIndexMasking = false;
             jit::JitOptions.spectreObjectMitigationsBarriers = false;
+            jit::JitOptions.spectreObjectMitigationsMisc = false;
             jit::JitOptions.spectreStringMitigations = false;
             jit::JitOptions.spectreValueMasking = false;
+            jit::JitOptions.spectreJitToCxxCalls = false;
         } else {
             return OptionFailure("spectre-mitigations", str);
         }

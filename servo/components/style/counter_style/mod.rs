@@ -22,6 +22,7 @@ use str::CssStringWriter;
 use style_traits::{Comma, CssWriter, OneOrMoreSeparated, ParseError};
 use style_traits::{StyleParseErrorKind, ToCss};
 use values::CustomIdent;
+use values::specified::Integer;
 
 /// Parse a counter style name reference.
 ///
@@ -298,7 +299,7 @@ counter_style_descriptors! {
 
     /// <https://drafts.csswg.org/css-counter-styles/#counter-style-pad>
     "pad" pad / eCSSCounterDesc_Pad: Pad = {
-        Pad(0, Symbol::String("".to_owned()))
+        Pad(Integer::new(0), Symbol::String("".to_owned()))
     }
 
     /// <https://drafts.csswg.org/css-counter-styles/#counter-style-fallback>
@@ -335,14 +336,14 @@ pub enum System {
     /// 'fixed <integer>?'
     Fixed {
         /// '<integer>?'
-        first_symbol_value: Option<i32>
+        first_symbol_value: Option<Integer>
     },
     /// 'extends <counter-style-name>'
     Extends(CustomIdent),
 }
 
 impl Parse for System {
-    fn parse<'i, 't>(_context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         try_match_ident_ignore_ascii_case! { input,
             "cyclic" => Ok(System::Cyclic),
             "numeric" => Ok(System::Numeric),
@@ -350,7 +351,7 @@ impl Parse for System {
             "symbolic" => Ok(System::Symbolic),
             "additive" => Ok(System::Additive),
             "fixed" => {
-                let first_symbol_value = input.try(|i| i.expect_integer()).ok();
+                let first_symbol_value = input.try(|i| Integer::parse(context, i)).ok();
                 Ok(System::Fixed { first_symbol_value: first_symbol_value })
             }
             "extends" => {
@@ -450,21 +451,19 @@ pub struct Ranges(pub Vec<Range<CounterBound>>);
 #[derive(Clone, Copy, Debug, ToCss)]
 pub enum CounterBound {
     /// An integer bound.
-    ///
-    /// FIXME(https://github.com/servo/servo/issues/20197)
-    Integer(i32),
+    Integer(Integer),
     /// The infinite bound.
     Infinite,
 }
 
 impl Parse for Ranges {
-    fn parse<'i, 't>(_context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
+    fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         if input.try(|input| input.expect_ident_matching("auto")).is_ok() {
             Ok(Ranges(Vec::new()))
         } else {
             input.parse_comma_separated(|input| {
-                let opt_start = parse_bound(input)?;
-                let opt_end = parse_bound(input)?;
+                let opt_start = parse_bound(context, input)?;
+                let opt_end = parse_bound(context, input)?;
                 if let (CounterBound::Integer(start), CounterBound::Integer(end)) = (opt_start, opt_end) {
                     if start > end {
                         return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
@@ -477,18 +476,13 @@ impl Parse for Ranges {
 }
 
 fn parse_bound<'i, 't>(
-    input: &mut Parser<'i, 't>,
+    context: &ParserContext, input: &mut Parser<'i, 't>,
 ) -> Result<CounterBound, ParseError<'i>> {
-    let location = input.current_source_location();
-    match *input.next()? {
-        Token::Number { int_value: Some(v), .. } => {
-            Ok(CounterBound::Integer(v))
-        }
-        Token::Ident(ref ident) if ident.eq_ignore_ascii_case("infinite") => {
-            Ok(CounterBound::Infinite)
-        }
-        ref t => Err(location.new_unexpected_token_error(t.clone())),
+    if let Ok(integer) = input.try(|input| Integer::parse(context, input)) {
+        return Ok(CounterBound::Integer(integer));
     }
+    input.expect_ident_matching("infinite")?;
+    Ok(CounterBound::Infinite)
 }
 
 impl ToCss for Ranges {
@@ -521,17 +515,14 @@ where
 
 /// <https://drafts.csswg.org/css-counter-styles/#counter-style-pad>
 #[derive(Clone, Debug, ToCss)]
-pub struct Pad(pub u32, pub Symbol);
+pub struct Pad(pub Integer, pub Symbol);
 
 impl Parse for Pad {
     fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         let pad_with = input.try(|input| Symbol::parse(context, input));
-        let min_length = input.expect_integer()?;
-        if min_length < 0 {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
-        }
+        let min_length = Integer::parse_non_negative(context, input)?;
         let pad_with = pad_with.or_else(|_| Symbol::parse(context, input))?;
-        Ok(Pad(min_length as u32, pad_with))
+        Ok(Pad(min_length, pad_with))
     }
 }
 
@@ -586,7 +577,7 @@ impl Parse for AdditiveSymbols {
 #[derive(Clone, Debug, ToCss)]
 pub struct AdditiveTuple {
     /// <integer>
-    pub weight: u32,
+    pub weight: Integer,
     /// <symbol>
     pub symbol: Symbol,
 }
@@ -598,13 +589,10 @@ impl OneOrMoreSeparated for AdditiveTuple {
 impl Parse for AdditiveTuple {
     fn parse<'i, 't>(context: &ParserContext, input: &mut Parser<'i, 't>) -> Result<Self, ParseError<'i>> {
         let symbol = input.try(|input| Symbol::parse(context, input));
-        let weight = input.expect_integer()?;
-        if weight < 0 {
-            return Err(input.new_custom_error(StyleParseErrorKind::UnspecifiedError))
-        }
+        let weight = Integer::parse_non_negative(context, input)?;
         let symbol = symbol.or_else(|_| Symbol::parse(context, input))?;
         Ok(AdditiveTuple {
-            weight: weight as u32,
+            weight: weight,
             symbol: symbol,
         })
     }

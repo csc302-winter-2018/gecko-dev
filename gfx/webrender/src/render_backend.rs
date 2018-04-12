@@ -172,9 +172,18 @@ impl Document {
 
     // TODO: We will probably get rid of this soon and always forward to the scene building thread.
     fn build_scene(&mut self, resource_cache: &mut ResourceCache) {
+        let max_texture_size = resource_cache.max_texture_size();
 
-        if self.view.window_size.width == 0 || self.view.window_size.height == 0 {
-            error!("ERROR: Invalid window dimensions! Please call api.set_window_size()");
+        if self.view.window_size.width == 0 ||
+           self.view.window_size.height == 0 ||
+           self.view.window_size.width > max_texture_size ||
+           self.view.window_size.height > max_texture_size {
+            error!("ERROR: Invalid window dimensions {}x{}. Please call api.set_window_size()",
+                self.view.window_size.width,
+                self.view.window_size.height,
+            );
+
+            return;
         }
 
         let old_builder = self.frame_builder.take().unwrap_or_else(FrameBuilder::empty);
@@ -370,6 +379,13 @@ impl DocumentOps {
     fn build() -> Self {
         DocumentOps {
             build: true,
+            ..DocumentOps::nop()
+        }
+    }
+
+    fn render() -> Self {
+        DocumentOps {
+            render: true,
             ..DocumentOps::nop()
         }
     }
@@ -668,7 +684,7 @@ impl RenderBackend {
             }
             FrameMsg::UpdateDynamicProperties(property_bindings) => {
                 doc.dynamic_properties.set_properties(property_bindings);
-                DocumentOps::build()
+                DocumentOps::render()
             }
         }
     }
@@ -679,8 +695,9 @@ impl RenderBackend {
 
     pub fn run(&mut self, mut profile_counters: BackendProfileCounters) {
         let mut frame_counter: u32 = 0;
+        let mut keep_going = true;
 
-        loop {
+        while keep_going {
             profile_scope!("handle_msg");
 
             while let Ok(msg) = self.scene_rx.try_recv() {
@@ -724,7 +741,7 @@ impl RenderBackend {
                 }
             }
 
-            let keep_going = match self.api_rx.recv() {
+            keep_going = match self.api_rx.recv() {
                 Ok(msg) => {
                     if let Some(ref mut r) = self.recorder {
                         r.write_msg(frame_counter, &msg);
@@ -733,13 +750,10 @@ impl RenderBackend {
                 }
                 Err(..) => { false }
             };
-
-            if !keep_going {
-                let _ = self.scene_tx.send(SceneBuilderRequest::Stop);
-                self.notifier.shut_down();
-                break;
-            }
         }
+
+        let _ = self.scene_tx.send(SceneBuilderRequest::Stop);
+        self.notifier.shut_down();
     }
 
     fn process_api_msg(
@@ -949,14 +963,6 @@ impl RenderBackend {
 
         let doc = self.documents.get_mut(&document_id).unwrap();
 
-        if !doc.can_render() {
-            // TODO: this happens if we are building the first scene asynchronously and
-            // scroll at the same time. we should keep track of the fact that we skipped
-            // composition here and do it as soon as we receive the scene.
-            op.render = false;
-            op.composite = false;
-        }
-
         if transaction_msg.generate_frame {
             if let Some(ref mut ros) = doc.render_on_scroll {
                 *ros = true;
@@ -966,6 +972,14 @@ impl RenderBackend {
                 op.render = true;
                 op.composite = true;
             }
+        }
+
+        if !doc.can_render() {
+            // TODO: this happens if we are building the first scene asynchronously and
+            // scroll at the same time. we should keep track of the fact that we skipped
+            // composition here and do it as soon as we receive the scene.
+            op.render = false;
+            op.composite = false;
         }
 
         debug_assert!(op.render || !op.composite);
